@@ -74,6 +74,7 @@ export default defineConfig(async ({ mode }) => {
       // optimizeDeps (dev-only) this also applies to the production build.
       dedupe: [
         'vue',
+        'pinia',
         'vue-router',
         'frappe-ui',
         'dompurify',
