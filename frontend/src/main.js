@@ -20,6 +20,7 @@ import {
   Badge,
   setConfig,
   frappeRequest,
+  call,
   FeatherIcon,
 } from 'frappe-ui'
 
@@ -57,6 +58,35 @@ for (let key in globalComponents) {
 app.use(telemetryPlugin, { app_name: 'crm' })
 
 app.config.globalProperties.$dialog = createDialog
+
+// frappe.call shim — Comercial stores use the global frappe.call({ method, args })
+// and expect a `{ message }` response. The CRM SPA only provides frappe-ui's `call()`
+// (which returns the unwrapped message), so bridge it before any Comercial component mounts.
+window.frappe = window.frappe || {}
+if (!window.frappe.call) {
+  window.frappe.call = async ({ method, args = {} } = {}) => {
+    try {
+      const message = await call(method, args)
+      return { message }
+    } catch (err) {
+      const parts = []
+      if (err.exc_type) parts.push(err.exc_type)
+      if (err.messages && err.messages.length) {
+        parts.push(err.messages.join(' | '))
+      }
+      if (err.exc && typeof err.exc === 'string') {
+        parts.push(err.exc.slice(0, 800))
+      }
+      const detail = parts.join(' — ') || err.message || 'Unknown error'
+      const e = new Error(detail)
+      e.messages = err.messages
+      e.exc_type = err.exc_type
+      e.exc = err.exc
+      e.status = err.status
+      throw e
+    }
+  }
+}
 
 let socket
 if (import.meta.env.DEV) {
