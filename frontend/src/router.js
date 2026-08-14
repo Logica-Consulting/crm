@@ -3,6 +3,7 @@ import { call } from 'frappe-ui'
 import { usersStore } from '@/stores/users'
 import { sessionStore } from '@/stores/session'
 import { viewsStore } from '@/stores/views'
+import { useDealContextStore } from '@comercial/stores/dealContext.js'
 
 let personaChecked = false
 export const PERSONA_DONE_KEY = 'crm_persona_captured'
@@ -58,6 +59,12 @@ const routes = [
     path: '/deals/:dealId',
     name: 'Deal',
     component: () => import(`@/pages/${handleMobileView('Deal')}.vue`),
+    props: true,
+  },
+  {
+    path: '/deals/:dealId/workspace',
+    name: 'DealWorkspace',
+    component: () => import('@comercial/components/DealWorkspace.vue'),
     props: true,
   },
   {
@@ -152,6 +159,30 @@ let router = createRouter({
 
 router.beforeEach(async (to, from, next) => {
   router.previousRoute = from
+
+  // Hydrate deal-context store when entering the Deal Workspace route
+  if (to.name === 'DealWorkspace' && to.params.dealId) {
+    try {
+      const dealCtx = useDealContextStore()
+      dealCtx.setActiveDeal(to.params.dealId)
+    } catch {
+      // Pinia may not be ready during initial navigation — the component
+      // also reads dealName from props as a fallback.
+    }
+  }
+
+  // Clear deal context when leaving the workspace
+  if (
+    from.name === 'DealWorkspace' &&
+    to.name !== 'DealWorkspace'
+  ) {
+    try {
+      const dealCtx = useDealContextStore()
+      dealCtx.clear()
+    } catch {
+      // Ignore if store is not available
+    }
+  }
 
   const { isLoggedIn, user } = sessionStore()
   const { users, isCrmUser, isAdmin } = usersStore()
