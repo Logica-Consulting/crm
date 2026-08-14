@@ -65,7 +65,7 @@ const routes = [
     path: '/deals/:dealId/workspace',
     name: 'DealWorkspace',
     component: () => import('@comercial/components/DealWorkspace.vue'),
-    props: true,
+    props: (route) => ({ dealName: route.params.dealId }),
   },
   {
     alias: '/notes',
