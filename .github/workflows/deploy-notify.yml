@@ -1,0 +1,18 @@
+name: Notify deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger deployment
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.DEPLOY_REPO_TOKEN }}
+          repository: marcoDevO/crm-deploy
+          event-type: crm
+          client-payload: '{"app":"crm","ref":"${{ github.sha }}"}'
