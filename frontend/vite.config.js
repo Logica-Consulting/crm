@@ -57,7 +57,9 @@ export default defineConfig(async ({ mode }) => {
     ],
     resolve: {
       alias: {
-        '@': path.resolve(import.meta.dirname, 'src'),
+        '@': path.resolve(__dirname, 'src'),
+        // Comercial app source — single-copy import avoids double Vue/Pinia.
+        '@comercial': path.resolve(__dirname, '../../comercial/frontend/src'),
         // point at the package src dir (not index.ts) so subpath imports like
         // `@framework/ui/components/Notifications` resolve. Importing subpaths avoids the
         // barrel, which `export *`s components (Grid/Phone/FormLayout) that need a newer
@@ -78,6 +80,7 @@ export default defineConfig(async ({ mode }) => {
       // optimizeDeps (dev-only) this also applies to the production build.
       dedupe: [
         'vue',
+        'pinia',
         'vue-router',
         'frappe-ui',
         'dompurify',
@@ -88,6 +91,7 @@ export default defineConfig(async ({ mode }) => {
         'prosemirror-state',
         'prosemirror-view',
         'prosemirror-transform',
+        'sortablejs',
       ],
     },
     optimizeDeps: {
@@ -103,8 +107,12 @@ export default defineConfig(async ({ mode }) => {
     server: {
       fs: {
         // allow the bench `apps/` dir so Vite can serve linked local packages
-        // (frappe-ui, @framework/ui) that live in sibling app repos
-        allow: [path.resolve(import.meta.dirname, '../..')],
+        // (frappe-ui, @framework/ui) that live in sibling app repos, plus
+        // the comercial app source for the @comercial alias.
+        allow: [
+          path.resolve(__dirname, '../..'),
+          path.resolve(__dirname, '../../../comercial'),
+        ],
       },
     },
   }

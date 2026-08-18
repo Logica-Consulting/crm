@@ -299,6 +299,16 @@ const links = [
     icon: PhoneIcon,
     to: 'Call Logs',
   },
+  {
+    label: 'Deal Workspace',
+    icon: LucideLayoutDashboard,
+    to: 'DealWorkspace',
+    condition: () => route.name === 'Deal' && route.params.dealId,
+    getTo: () => ({
+      name: 'DealWorkspace',
+      params: { dealId: route.params.dealId },
+    }),
+  },
 ]
 
 const allViews = computed(() => {
@@ -318,7 +328,7 @@ const allViews = computed(() => {
           label: link.label,
           icon: link.icon,
           key: link.to,
-          to: { name: link.to },
+          to: link.getTo ? link.getTo() : { name: link.to },
         })),
     },
   ]
