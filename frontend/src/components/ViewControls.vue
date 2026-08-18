@@ -326,6 +326,7 @@ import { usersStore } from '@/stores/users'
 import { getMeta } from '@/stores/meta'
 import { isEmoji } from '@/utils'
 import { renderFieldLayoutDialog } from '@/utils/renderFieldLayoutDialog'
+import { shouldInterceptPerdido } from '@/utils/perdidoInterception'
 import {
   Combobox,
   Tooltip,
@@ -995,11 +996,7 @@ async function openLostReasonDialog(dealName) {
 function updateKanbanSettings(data) {
   if (data.item && data.to) {
     // Intercept Perdido drag on CRM Deal pipeline kanban → prompt lost_reason
-    if (
-      props.doctype === 'CRM Deal' &&
-      view.value.column_field === 'comercial_pipeline_stage' &&
-      data.to === 'Perdido'
-    ) {
+    if (shouldInterceptPerdido(props.doctype, view.value.column_field, data.to)) {
       openLostReasonDialog(data.item)
       return
     }
