@@ -219,10 +219,12 @@ class CRMDeal(Document):
 
 	def update_closed_date(self):
 		"""
-		Update the closed date based on the "Won" status.
+		Update the closed date based on the status type (Won).
 		"""
-		if self.status == "Won" and not self.closed_date:
-			self.closed_date = frappe.utils.nowdate()
+		if not self.closed_date and self.status:
+			status_type = frappe.db.get_value("CRM Deal Status", self.status, "type")
+			if status_type == "Won":
+				self.closed_date = frappe.utils.nowdate()
 
 	def update_default_probability(self):
 		"""
