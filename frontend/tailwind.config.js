@@ -16,7 +16,21 @@ export default {
     // used in comercial components must be generated in the CRM SPA bundle
     '../../../comercial/frontend/src/**/*.{vue,js,ts,jsx,tsx}',
   ],
-  safelist: [{ pattern: /!(text|bg)-/, variants: ['hover', 'active'] }],
+  safelist: [
+    '!text-gray-700',
+    '!text-blue-600',
+    '!text-green-700',
+    '!text-red-600',
+    '!text-pink-600',
+    '!text-orange-600',
+    '!text-amber-600',
+    '!text-yellow-600',
+    '!text-cyan-600',
+    '!text-teal-600',
+    '!text-violet-600',
+    '!text-purple-600',
+    '!text-ink-gray-9',
+  ],
   theme: {
     extend: {},
   },
