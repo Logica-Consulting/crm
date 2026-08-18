@@ -325,6 +325,7 @@ import { viewsStore } from '@/stores/views'
 import { usersStore } from '@/stores/users'
 import { getMeta } from '@/stores/meta'
 import { isEmoji } from '@/utils'
+import { renderFieldLayoutDialog } from '@/utils/renderFieldLayoutDialog'
 import {
   Combobox,
   Tooltip,
@@ -951,8 +952,58 @@ function persistCustomView() {
   })
 }
 
+async function openLostReasonDialog(dealName) {
+  const result = await renderFieldLayoutDialog({
+    title: __('Mark as Lost'),
+    fields: [
+      {
+        fieldname: 'lost_reason',
+        fieldtype: 'Link',
+        options: 'CRM Lost Reason',
+        label: __('Lost Reason'),
+        required: 1,
+      },
+      {
+        fieldname: 'lost_notes',
+        fieldtype: 'Text',
+        label: __('Notes'),
+      },
+    ],
+    required: ['lost_reason'],
+    submitLabel: __('Mark as Lost'),
+    cancelLabel: __('Cancel'),
+  })
+
+  if (!result || !result.lost_reason) return
+
+  try {
+    await call('comercial.comercial.api.pipeline.mark_as_lost', {
+      deal_name: dealName,
+      lost_reason: result.lost_reason,
+      lost_notes: result.lost_notes || '',
+    })
+    toast.success(__('Deal marked as lost'))
+    // Reload the list to reflect the change
+    if (list.value?.reload) {
+      list.value.reload()
+    }
+  } catch (err) {
+    toast.error(err.message || __('Failed to mark deal as lost'))
+  }
+}
+
 function updateKanbanSettings(data) {
   if (data.item && data.to) {
+    // Intercept Perdido drag on CRM Deal pipeline kanban → prompt lost_reason
+    if (
+      props.doctype === 'CRM Deal' &&
+      view.value.column_field === 'comercial_pipeline_stage' &&
+      data.to === 'Perdido'
+    ) {
+      openLostReasonDialog(data.item)
+      return
+    }
+
     call('frappe.client.set_value', {
       doctype: props.doctype,
       name: data.item,
