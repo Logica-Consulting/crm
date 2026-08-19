@@ -5,36 +5,43 @@
  * Reversal interception fires when ALL of:
  *   - doctype is "CRM Deal"
  *   - column_field is "status" (native single-axis)
- *   - fromStatus is a terminal status (Perdido or Won-type)
+ *   - fromStatus is a terminal status (Won or Lost type)
  *   - toStatus is NOT a terminal status (active stage)
  *   - fromStatus !== toStatus (actual move)
  *
- * Terminal statuses: "Perdido" (Lost) + any Won-type status.
- * For simplicity, we treat known Won-type names as terminal:
- *   Delivery, Commercial Closure (the two Won statuses seeded by comercial).
+ * Terminal-ness is derived from the status `type` field (Won/Lost), matching
+ * the backend, rather than hardcoding status names.
  *
  * @param {string} doctype     — the list's doctype
  * @param {string} columnField — the kanban's column_field
  * @param {string} fromStatus  — current status (drag source column)
  * @param {string} toStatus    — target status (drag destination column)
+ * @param {string} [fromType]  — type of the source status (Won/Lost/Ongoing/Open)
+ * @param {string} [toType]    — type of the target status
  * @returns {boolean}
  */
 
-const WON_STATUSES = new Set(['Delivery', 'Commercial Closure'])
-const LOST_STATUSES = new Set(['Perdido'])
+const TERMINAL_TYPES = new Set(['Won', 'Lost'])
 
-function isTerminal(status) {
-  return WON_STATUSES.has(status) || LOST_STATUSES.has(status)
+function isTerminalType(type) {
+  return TERMINAL_TYPES.has(type)
 }
 
-export function shouldInterceptReversal(doctype, columnField, fromStatus, toStatus) {
+export function shouldInterceptReversal(
+  doctype,
+  columnField,
+  fromStatus,
+  toStatus,
+  fromType,
+  toType
+) {
   return !!(
     doctype === 'CRM Deal' &&
     columnField === 'status' &&
     fromStatus &&
     toStatus &&
     fromStatus !== toStatus &&
-    isTerminal(fromStatus) &&
-    !isTerminal(toStatus)
+    isTerminalType(fromType) &&
+    !isTerminalType(toType)
   )
 }

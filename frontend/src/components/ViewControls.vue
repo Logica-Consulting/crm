@@ -323,6 +323,7 @@ import { getSettings } from '@/stores/settings'
 import { globalStore } from '@/stores/global'
 import { viewsStore } from '@/stores/views'
 import { usersStore } from '@/stores/users'
+import { statusesStore } from '@/stores/statuses'
 import { getMeta } from '@/stores/meta'
 import { isEmoji } from '@/utils'
 import { renderFieldLayoutDialog } from '@/utils/renderFieldLayoutDialog'
@@ -362,6 +363,7 @@ const { brand } = getSettings()
 const { $dialog } = globalStore()
 const { reload: reloadView, getDefaultView, getView } = viewsStore()
 const { isManager } = usersStore()
+const { getDealStatus } = statusesStore()
 
 const list = defineModel({ type: Object, default: () => ({}) })
 const loadMore = defineModel('loadMore', { type: Boolean })
@@ -1017,26 +1019,11 @@ async function openReversalReasonDialog(dealName, fromStatus, toStatus) {
   if (!result || !result.reversal_reason) return
 
   try {
-    // Set the new status (backend validate_deal_status handles reversal logic)
-    await call('frappe.client.set_value', {
-      doctype: props.doctype,
-      name: dealName,
-      fieldname: view.value.column_field,
-      value: toStatus,
-    })
-
-    // Log the reversal reason as a comment
-    await call('frappe.client.insert', {
-      doc: {
-        doctype: 'Comment',
-        comment_type: 'Comment',
-        reference_doctype: props.doctype,
-        reference_name: dealName,
-        content: __(
-          'Status reversed from {0} to {1}. Reason: {2}',
-          [fromStatus, toStatus, result.reversal_reason]
-        ),
-      },
+    // Reverse atomically: status + reason comment in a single server call.
+    await call('comercial.comercial.api.pipeline.reverse_deal', {
+      deal: dealName,
+      target_status: toStatus,
+      reason: result.reversal_reason,
     })
 
     toast.success(__('Deal status reversed'))
@@ -1063,7 +1050,9 @@ function updateKanbanSettings(data) {
         props.doctype,
         view.value.column_field,
         data.from,
-        data.to
+        data.to,
+        getDealStatus(data.from)?.type,
+        getDealStatus(data.to)?.type
       )
     ) {
       openReversalReasonDialog(data.item, data.from, data.to)
