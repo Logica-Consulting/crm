@@ -48,7 +48,7 @@
           v-if="activeCustomTab"
           :is="activeCustomTab.render"
           :dealId="dealId"
-          :dealName="dealId"
+          :dealName="title"
           class="flex flex-1 overflow-hidden"
         />
         <Activities
