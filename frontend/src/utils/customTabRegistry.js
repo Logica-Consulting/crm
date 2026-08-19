@@ -16,69 +16,52 @@
  *
  * The registry is exposed globally on `window` so that external IIFE builds
  * (loaded via app_include_js) can register tabs without importing ES modules.
+ *
+ * Load-order safety: external IIFEs may evaluate BEFORE this module (the SPA
+ * bundle is a deferred module). Registrations made before this module runs are
+ * buffered in `window.__crmCustomTabPendingRegistrations` and flushed into the
+ * registry on initialization. The registry also adopts any pre-existing
+ * `window.__crmCustomTabRegistry` instead of clobbering it.
  */
 
 import { reactive } from 'vue'
 
-const registry = reactive(new Map())
-
 /**
- * Register a custom Deal tab.
- * @param {Object} tabDef - Tab definition
- * @param {string} tabDef.name - Unique tab identifier
- * @param {string} tabDef.label - Display label
- * @param {number} [tabDef.order=99] - Sort order (lower = earlier)
- * @param {Function|Object} tabDef.render - Vue component or render function
- * @param {Object} [tabDef.icon] - Icon component
- * @param {Function} [tabDef.condition] - Visibility condition
+ * Create a fresh custom Deal tab registry.
+ * @returns {Object} registry API
  */
-export function registerDealTab(tabDef) {
-  if (!tabDef || !tabDef.name) {
-    throw new Error('registerDealTab: tabDef.name is required')
+function createRegistry() {
+  const registry = reactive(new Map())
+
+  function registerDealTab(tabDef) {
+    if (!tabDef || !tabDef.name) {
+      throw new Error('registerDealTab: tabDef.name is required')
+    }
+    registry.set(tabDef.name, {
+      order: 99,
+      ...tabDef,
+    })
   }
-  registry.set(tabDef.name, {
-    order: 99,
-    ...tabDef,
-  })
-}
 
-/**
- * Unregister a custom Deal tab by name.
- * @param {string} name - Tab name to remove
- */
-export function unregisterDealTab(name) {
-  registry.delete(name)
-}
+  function unregisterDealTab(name) {
+    registry.delete(name)
+  }
 
-/**
- * Get all registered tabs, sorted by order.
- * @returns {Array} Array of tab definitions
- */
-export function getRegisteredDealTabs() {
-  return Array.from(registry.values()).sort(
-    (a, b) => (a.order ?? 99) - (b.order ?? 99)
-  )
-}
+  function getRegisteredDealTabs() {
+    return Array.from(registry.values()).sort(
+      (a, b) => (a.order ?? 99) - (b.order ?? 99)
+    )
+  }
 
-/**
- * Get a specific registered tab by name.
- * @param {string} name - Tab name
- * @returns {Object|undefined} Tab definition or undefined
- */
-export function getDealTab(name) {
-  return registry.get(name)
-}
+  function getDealTab(name) {
+    return registry.get(name)
+  }
 
-/**
- * Clear all registered tabs (useful for testing).
- */
-export function clearDealTabRegistry() {
-  registry.clear()
-}
+  function clearDealTabRegistry() {
+    registry.clear()
+  }
 
-// Expose registry globally for external IIFE builds (e.g. comercial app)
-if (typeof window !== 'undefined') {
-  window.__crmCustomTabRegistry = {
+  return {
     registerDealTab,
     unregisterDealTab,
     getRegisteredDealTabs,
@@ -86,3 +69,39 @@ if (typeof window !== 'undefined') {
     clearDealTabRegistry,
   }
 }
+
+const PENDING_KEY = '__crmCustomTabPendingRegistrations'
+
+/**
+ * Flush registrations buffered before this module evaluated into the registry.
+ */
+function flushPendingRegistrations(target) {
+  if (typeof window === 'undefined') return
+  const pending = window[PENDING_KEY]
+  if (!Array.isArray(pending) || pending.length === 0) return
+  for (const tabDef of pending) {
+    try {
+      target.registerDealTab(tabDef)
+    } catch {
+      // Ignore malformed buffered definitions — never break registry init.
+    }
+  }
+  window[PENDING_KEY] = []
+}
+
+// Lazy + defensive initialization: adopt any pre-existing registry (e.g. a
+// bootstrap stub) rather than clobbering it, otherwise create a fresh one.
+const registry =
+  (typeof window !== 'undefined' && window.__crmCustomTabRegistry) ||
+  createRegistry()
+
+if (typeof window !== 'undefined') {
+  window.__crmCustomTabRegistry = registry
+  flushPendingRegistrations(registry)
+}
+
+export const registerDealTab = registry.registerDealTab
+export const unregisterDealTab = registry.unregisterDealTab
+export const getRegisteredDealTabs = registry.getRegisteredDealTabs
+export const getDealTab = registry.getDealTab
+export const clearDealTabRegistry = registry.clearDealTabRegistry
