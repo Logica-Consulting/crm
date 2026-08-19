@@ -327,6 +327,7 @@ import { getMeta } from '@/stores/meta'
 import { isEmoji } from '@/utils'
 import { renderFieldLayoutDialog } from '@/utils/renderFieldLayoutDialog'
 import { shouldInterceptPerdido } from '@/utils/perdidoInterception'
+import { shouldInterceptReversal } from '@/utils/reversalInterception'
 import {
   Combobox,
   Tooltip,
@@ -993,11 +994,79 @@ async function openLostReasonDialog(dealName) {
   }
 }
 
+async function openReversalReasonDialog(dealName, fromStatus, toStatus) {
+  const result = await renderFieldLayoutDialog({
+    title: __('Reverse Deal Status'),
+    fields: [
+      {
+        fieldname: 'reversal_reason',
+        fieldtype: 'Text',
+        label: __('Reason for reversal'),
+        description: __(
+          'This deal is being moved from {0} back to {1}. Please provide a reason.',
+          [fromStatus, toStatus]
+        ),
+        required: 1,
+      },
+    ],
+    required: ['reversal_reason'],
+    submitLabel: __('Confirm Reversal'),
+    cancelLabel: __('Cancel'),
+  })
+
+  if (!result || !result.reversal_reason) return
+
+  try {
+    // Set the new status (backend validate_deal_status handles reversal logic)
+    await call('frappe.client.set_value', {
+      doctype: props.doctype,
+      name: dealName,
+      fieldname: view.value.column_field,
+      value: toStatus,
+    })
+
+    // Log the reversal reason as a comment
+    await call('frappe.client.insert', {
+      doc: {
+        doctype: 'Comment',
+        comment_type: 'Comment',
+        reference_doctype: props.doctype,
+        reference_name: dealName,
+        content: __(
+          'Status reversed from {0} to {1}. Reason: {2}',
+          [fromStatus, toStatus, result.reversal_reason]
+        ),
+      },
+    })
+
+    toast.success(__('Deal status reversed'))
+    if (list.value?.reload) {
+      list.value.reload()
+    }
+  } catch (err) {
+    toast.error(err.message || __('Failed to reverse deal status'))
+  }
+}
+
 function updateKanbanSettings(data) {
   if (data.item && data.to) {
     // Intercept Perdido drag on CRM Deal pipeline kanban → prompt lost_reason
     if (shouldInterceptPerdido(props.doctype, view.value.column_field, data.to)) {
       openLostReasonDialog(data.item)
+      return
+    }
+
+    // Intercept reversal: terminal → active stage → prompt for reason
+    if (
+      data.from &&
+      shouldInterceptReversal(
+        props.doctype,
+        view.value.column_field,
+        data.from,
+        data.to
+      )
+    ) {
+      openReversalReasonDialog(data.item, data.from, data.to)
       return
     }
 
