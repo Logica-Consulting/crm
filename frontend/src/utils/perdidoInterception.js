@@ -4,7 +4,7 @@
  *
  * Interception fires ONLY when ALL of:
  *   - doctype is "CRM Deal"
- *   - column_field is "comercial_pipeline_stage"
+ *   - column_field is "status" (native single-axis)
  *   - target column (data.to) is "Perdido"
  *
  * @param {string} doctype    — the list's doctype (from props)
@@ -15,7 +15,7 @@
 export function shouldInterceptPerdido(doctype, columnField, toValue) {
   return (
     doctype === 'CRM Deal' &&
-    columnField === 'comercial_pipeline_stage' &&
+    columnField === 'status' &&
     toValue === 'Perdido'
   )
 }
