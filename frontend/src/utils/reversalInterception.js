@@ -28,7 +28,7 @@ function isTerminal(status) {
 }
 
 export function shouldInterceptReversal(doctype, columnField, fromStatus, toStatus) {
-  return (
+  return !!(
     doctype === 'CRM Deal' &&
     columnField === 'status' &&
     fromStatus &&
