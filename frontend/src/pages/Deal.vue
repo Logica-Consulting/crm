@@ -44,7 +44,15 @@
       class="flex flex-1 overflow-hidden flex-col [&_[role='tab']]:px-0 [&_[role='tab']]:shrink-0 [&_[role='tablist']]:px-5 [&_[role='tablist']::-webkit-scrollbar]:h-0 [&_[role='tablist']]:min-h-[45px] [&_[role='tablist']]:gap-7.5 [&_[role='tabpanel']:not([hidden])]:flex [&_[role='tabpanel']:not([hidden])]:grow"
     >
       <template #tab-panel>
+        <component
+          v-if="activeCustomTab"
+          :is="activeCustomTab.render"
+          :dealId="dealId"
+          :dealName="dealId"
+          class="flex flex-1 overflow-hidden"
+        />
         <Activities
+          v-else
           ref="activities"
           v-model:reload="reload"
           v-model:tabIndex="tabIndex"
@@ -405,6 +413,7 @@ import {
 import { useRoute, useRouter } from 'vue-router'
 import { useActiveTabManager } from '@/composables/useActiveTabManager'
 import { useUnsavedChangesWarning } from '@/composables/useUnsavedChangesWarning'
+import { getRegisteredDealTabs, getDealTab } from '@/utils/customTabRegistry'
 
 const { on } = useBroadcast()
 const { brand } = getSettings()
@@ -609,7 +618,26 @@ const tabs = computed(() => {
       condition: () => whatsappEnabled.value,
     },
   ]
-  return tabOptions.filter((tab) => (tab.condition ? tab.condition() : true))
+
+  // Merge custom tabs registered by external apps (e.g. comercial)
+  const customTabs = getRegisteredDealTabs().map((tab) => ({
+    name: tab.name,
+    label: tab.label || __(tab.name),
+    icon: tab.icon,
+    condition: tab.condition,
+    _custom: true,
+  }))
+
+  return [...tabOptions, ...customTabs].filter((tab) =>
+    tab.condition ? tab.condition() : true
+  )
+})
+
+/** Check if the current active tab is a custom registered tab */
+const activeCustomTab = computed(() => {
+  const currentTab = tabs.value[tabIndex.value]
+  if (!currentTab?._custom) return null
+  return getDealTab(currentTab.name)
 })
 
 const { tabIndex } = useActiveTabManager(tabs, 'lastDealTab')
