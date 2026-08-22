@@ -13,6 +13,6 @@ jobs:
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.DEPLOY_REPO_TOKEN }}
-          repository: marcoDevO/crm-deploy
+          repository: Logica-Consulting/crm-deploy
           event-type: crm
           client-payload: '{"app":"crm","ref":"${{ github.sha }}"}'
