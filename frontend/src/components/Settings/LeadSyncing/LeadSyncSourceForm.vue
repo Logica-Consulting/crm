@@ -43,7 +43,7 @@
     <Tabs v-model="tabIndex" as="div" :tabs="tabs" class="mt-2">
       <template #tab-panel="{ tab }">
         <div
-          v-if="tab.label == 'Details'"
+          v-if="tab.name == 'Details'"
           class="overflow-hidden flex h-full flex-col gap-6 mt-4"
         >
           <!-- Form -->
@@ -153,7 +153,7 @@
           </div>
         </div>
 
-        <div v-if="tab.label == 'Failure Logs'" class="mt-4">
+        <div v-if="tab.name == 'Failure Logs'" class="mt-4">
           <FailureLogs :source="syncSource.name" />
         </div>
       </template>
@@ -194,6 +194,7 @@ const emit = defineEmits(['updateStep'])
 const tabs = computed(() => {
   const tabList = [
     {
+      name: 'Details',
       label: __('Details'),
       icon: DetailsIcon,
     },
@@ -201,6 +202,7 @@ const tabs = computed(() => {
 
   if (!isLocal.value) {
     tabList.push({
+      name: 'Failure Logs',
       label: __('Failure Logs'),
       icon: RefreshIcon,
     })
@@ -242,7 +244,7 @@ const fieldsMap = computed(() => {
 const sources = inject('sources')
 const syncSource = ref({
   name: '',
-  type: '',
+  type: 'Facebook',
   access_token: '',
   facebook_page: '',
   facebook_lead_form: '',
@@ -279,6 +281,14 @@ function updateSource(data) {
 }
 
 function createSource() {
+  if (
+    !syncSource.value.name ||
+    !syncSource.value.type ||
+    !syncSource.value.access_token
+  ) {
+    toast.error(__('Please fill in all required fields'))
+    return
+  }
   sources.insert.submit(
     {
       ...syncSource.value,
