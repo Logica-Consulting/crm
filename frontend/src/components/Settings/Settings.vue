@@ -75,6 +75,8 @@ import DashboardSettings from '@/components/Settings/DashboardSettings.vue'
 import EmailTemplatePage from '@/components/Settings/EmailTemplate/EmailTemplatePage.vue'
 import TelephonyPage from '@/components/Settings/Telephony/TelephonyPage.vue'
 import EmailConfig from '@/components/Settings/EmailConfig.vue'
+import LLMSettings from '@logica/components/LLMSettings.vue'
+import LucideBot from '~icons/lucide/bot'
 import Icon from '@/components/Icon.vue'
 import { usersStore } from '@/stores/users'
 import {
@@ -89,7 +91,7 @@ import AssignmentRulePage from './AssignmentRules/AssignmentRulePage.vue'
 import ShieldCheck from '~icons/lucide/shield-check'
 import SlaConfig from './Sla/SlaConfig.vue'
 
-const { isManager, getUser } = usersStore()
+const { isManager, isAdmin, getUser } = usersStore()
 
 const user = computed(() => getUser() || {})
 
@@ -233,6 +235,12 @@ const tabs = computed(() => {
           icon: 'refresh-cw',
           component: markRaw(LeadSyncSourcePage),
           condition: () => isManager(),
+        },
+        {
+          label: __('AI Assistant'),
+          icon: LucideBot,
+          component: markRaw(LLMSettings),
+          condition: () => isAdmin(),
         },
       ],
     },
