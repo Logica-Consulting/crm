@@ -58,7 +58,7 @@ export default defineConfig(async ({ mode }) => {
         // Comercial app source — single-copy import avoids double Vue/Pinia.
         '@comercial': path.resolve(__dirname, '../../comercial/frontend/src'),
         // Logica CRM app source — settings components (e.g. AI Assistant).
-        '@logica': path.resolve(__dirname, '../../../logica_crm/frontend/src'),
+        '@logica': path.resolve(__dirname, '../../logica_crm/frontend/src'),
         // point at the package src dir (not index.ts) so subpath imports like
         // `@framework/ui/components/Notifications` resolve. Importing subpaths avoids the
         // barrel, which `export *`s components (Grid/Phone/FormLayout) that need a newer
@@ -108,7 +108,7 @@ export default defineConfig(async ({ mode }) => {
         allow: [
           path.resolve(__dirname, '../..'),
           path.resolve(__dirname, '../../../comercial'),
-          path.resolve(__dirname, '../../../logica_crm'),
+          path.resolve(__dirname, '../../logica_crm'),
         ],
       },
     },
