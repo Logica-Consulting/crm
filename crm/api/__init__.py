@@ -133,6 +133,7 @@ def invite_by_email(emails: str, role: str):
 		filters={
 			"email": ["in", email_list],
 			"role": ["in", ["System Manager", "Sales Manager", "Sales User"]],
+			"status": "Pending",
 		},
 		pluck="email",
 	)
