@@ -418,6 +418,8 @@ def parse_template_parameters(string, parameters):
 
 
 def get_from_name(message):
+	if not message.get("reference_doctype") or not message.get("reference_name"):
+		return message.get("from", "")
 	doc = frappe.get_doc(message["reference_doctype"], message["reference_name"])
 	from_name = ""
 	if message["reference_doctype"] == "CRM Deal":
