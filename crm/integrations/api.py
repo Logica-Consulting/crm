@@ -162,7 +162,7 @@ def get_contact_by_phone_number(phone_number: str):
 	if number.get("is_valid"):
 		return get_contact(number.get("national_number"), number.get("country"))
 	else:
-		return get_contact(phone_number, number.get("country"), exact_match=True)
+		return get_contact(phone_number, number.get("country"))
 
 
 def _resolve_validated_ip(hostname: str, port: int) -> str:
@@ -299,7 +299,7 @@ def get_recording_url(call_log_name: str):
 	return response
 
 
-def get_contact(phone_number: str, country: str = "IN", exact_match: bool = False):
+def get_contact(phone_number: str, country: str = "IN"):
 	if not phone_number:
 		return {"mobile_no": phone_number}
 
@@ -350,9 +350,7 @@ def get_contact(phone_number: str, country: str = "IN", exact_match: bool = Fals
 				deal = frappe.db.get_value(
 					"CRM Contacts", {"contact": contact.name, "is_primary": 1}, "parent"
 				)
-				if phones_match(contact.matched_phone, phone_number, country) if not exact_match else (
-					_normalize_phone_digits(contact.matched_phone) == _normalize_phone_digits(phone_number)
-				):
+				if phones_match(contact.matched_phone, phone_number, country):
 					contact["deal"] = deal
 					return contact
 
@@ -373,18 +371,12 @@ def get_contact(phone_number: str, country: str = "IN", exact_match: bool = Fals
 
 	if len(leads):
 		for lead in leads:
-			if phones_match(lead.mobile_no, phone_number, country) if not exact_match else (
-				_normalize_phone_digits(lead.mobile_no) == _normalize_phone_digits(phone_number)
-			):
+			if phones_match(lead.mobile_no, phone_number, country):
 				lead["lead"] = lead.name
 				lead["full_name"] = lead.lead_name
 				return lead
 
-	if len(contacts) and (
-		phones_match(contacts[0].matched_phone, phone_number, country) if not exact_match else (
-			_normalize_phone_digits(contacts[0].matched_phone) == _normalize_phone_digits(phone_number)
-		)
-	):
+	if len(contacts) and phones_match(contacts[0].matched_phone, phone_number, country):
 		return contacts[0]
 
 	return {"mobile_no": phone_number}
