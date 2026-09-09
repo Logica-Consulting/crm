@@ -7,7 +7,7 @@ import frappe
 
 from crm.api.whatsapp import notify_agent, on_update, validate
 from crm.tests import CRMTestCase as FrappeTestCase
-from crm.utils import phones_match
+from crm.utils import _get_phone_variants, phones_match
 
 
 class TestWhatsAppHooks(FrappeTestCase):
@@ -134,6 +134,53 @@ class TestPhonesMatch(FrappeTestCase):
 	def test_short_numbers_no_match(self):
 		"""Numbers shorter than 10 digits don't match via fallback"""
 		self.assertFalse(phones_match("12345", "123456"))
+
+
+class TestGetPhoneVariants(FrappeTestCase):
+	"""Tests for _get_phone_variants() search variant generation."""
+
+	def test_mx_with_trunk(self):
+		"""MX number with trunk '1' generates variants without trunk and without country code"""
+		variants = _get_phone_variants("5216691252211")
+		self.assertIn("5216691252211", variants)  # original
+		self.assertIn("526691252211", variants)    # without trunk
+		self.assertIn("6691252211", variants)      # without country code
+
+	def test_mx_without_trunk(self):
+		"""MX number without trunk generates variants with trunk and without country code"""
+		variants = _get_phone_variants("526691252211")
+		self.assertIn("526691252211", variants)    # original
+		self.assertIn("5216691252211", variants)   # with trunk
+		self.assertIn("6691252211", variants)      # without country code
+
+	def test_no_country_code(self):
+		"""Number without country code only generates itself"""
+		variants = _get_phone_variants("6691252211")
+		self.assertIn("6691252211", variants)
+
+	def test_ar_with_trunk(self):
+		"""AR number with trunk '9' generates variants without trunk"""
+		variants = _get_phone_variants("5491155551234")
+		self.assertIn("5491155551234", variants)   # original
+		self.assertIn("541155551234", variants)    # without trunk
+
+	def test_ar_without_trunk(self):
+		"""AR number without trunk generates variants with trunk"""
+		variants = _get_phone_variants("541155551234")
+		self.assertIn("541155551234", variants)    # original
+		self.assertIn("5491155551234", variants)   # with trunk
+
+	def test_empty_input(self):
+		"""Empty input returns empty list"""
+		self.assertEqual(_get_phone_variants(""), [])
+		self.assertEqual(_get_phone_variants(None), [])
+
+	def test_with_plus_prefix(self):
+		"""Number with '+' is normalized before generating variants"""
+		variants = _get_phone_variants("+5216691252211")
+		self.assertIn("5216691252211", variants)
+		self.assertIn("526691252211", variants)
+		self.assertIn("6691252211", variants)
 
 
 class TestOnUpdateRealtime(FrappeTestCase):
