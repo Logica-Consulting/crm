@@ -6,11 +6,10 @@ import frappe
 import requests
 from frappe import _
 from frappe.query_builder import Order
-from pypika import Criterion
 from pypika.functions import Replace
 from werkzeug.wrappers import Response
 
-from crm.utils import _get_phone_variants, _normalize_phone_digits, are_same_phone_number, parse_phone_number, phones_match
+from crm.utils import _normalize_phone_digits, are_same_phone_number, parse_phone_number, phones_match
 
 
 def _get_recording_credentials(telephony_medium: str) -> tuple | None:
@@ -313,8 +312,10 @@ def get_contact(phone_number: str, country: str = "IN", exact_match: bool = Fals
 		.replace("+", "")
 	)
 
-	# Generate search variants to handle trunk prefix and country code variations
-	phone_variants = _get_phone_variants(cleaned_number)
+	# Permissive search: use last 10 digits (subscriber number)
+	# This handles trunk prefix variations (MX '1', AR '9') and country code differences
+	# phones_match() will do strict validation after the permissive LIKE filter
+	search_digits = cleaned_number[-10:] if len(cleaned_number) >= 10 else cleaned_number
 
 	# Check if the number is associated with a contact.
 	# Search all of a contact's numbers (phone_nos child table) and not just the
@@ -324,9 +325,6 @@ def get_contact(phone_number: str, country: str = "IN", exact_match: bool = Fals
 	normalized_phone = Replace(
 		Replace(Replace(Replace(Replace(ContactPhone.phone, " ", ""), "-", ""), "(", ""), ")", ""), "+", ""
 	)
-
-	# Build OR conditions for all phone variants
-	like_conditions = [normalized_phone.like(f"%{v}%") for v in phone_variants]
 
 	query = (
 		frappe.qb.from_(ContactPhone)
@@ -340,7 +338,7 @@ def get_contact(phone_number: str, country: str = "IN", exact_match: bool = Fals
 			ContactPhone.phone.as_("matched_phone"),
 		)
 		.where(ContactPhone.parenttype == "Contact")
-		.where(Criterion.any(like_conditions))
+		.where(normalized_phone.like(f"%{search_digits}%"))
 		.orderby(Contact.modified, order=Order.desc)
 	)
 	contacts = query.run(as_dict=True)
@@ -364,14 +362,11 @@ def get_contact(phone_number: str, country: str = "IN", exact_match: bool = Fals
 		Replace(Replace(Replace(Replace(Lead.mobile_no, " ", ""), "-", ""), "(", ""), ")", ""), "+", ""
 	)
 
-	# Build OR conditions for all phone variants
-	like_conditions = [normalized_phone.like(f"%{v}%") for v in phone_variants]
-
 	query = (
 		frappe.qb.from_(Lead)
 		.select(Lead.name, Lead.lead_name, Lead.image, Lead.mobile_no)
 		.where(Lead.converted == 0)
-		.where(Criterion.any(like_conditions))
+		.where(normalized_phone.like(f"%{search_digits}%"))
 		.orderby("modified", order=Order.desc)
 	)
 	leads = query.run(as_dict=True)

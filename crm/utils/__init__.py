@@ -89,62 +89,6 @@ def _remove_trunk_prefix(digits: str) -> str:
 	return digits
 
 
-def _add_trunk_prefix(digits: str) -> str:
-	"""Add trunk prefix if missing after country code.
-	
-	Handles:
-	  - Mexico: 52 + number → 52 + 1 + number
-	  - Argentina: 54 + number → 54 + 9 + number
-	"""
-	if digits.startswith("52") and not digits.startswith("521") and len(digits) >= 12:
-		return "521" + digits[2:]
-	if digits.startswith("54") and not digits.startswith("549") and len(digits) >= 12:
-		return "549" + digits[2:]
-	return digits
-
-
-def _get_phone_variants(phone_number: str) -> list:
-	"""Generate search variants for a phone number to handle trunk prefix and country code variations.
-	
-	For "5216691252211" (MX with trunk):
-	  - "5216691252211" (original)
-	  - "526691252211" (without trunk)
-	  - "6691252211" (without country code)
-	
-	For "526691252211" (MX without trunk):
-	  - "526691252211" (original)
-	  - "5216691252211" (with trunk)
-	  - "6691252211" (without country code)
-	
-	For "6691252211" (no country code):
-	  - "6691252211" (original)
-	"""
-	digits = _normalize_phone_digits(phone_number)
-	if not digits:
-		return []
-	
-	variants = {digits}
-	
-	# Add variant without trunk prefix
-	without_trunk = _remove_trunk_prefix(digits)
-	if without_trunk != digits:
-		variants.add(without_trunk)
-	
-	# Add variant with trunk prefix
-	with_trunk = _add_trunk_prefix(digits)
-	if with_trunk != digits:
-		variants.add(with_trunk)
-	
-	# Add variant without country code (last 10 digits)
-	if len(digits) > 10:
-		variants.add(digits[-10:])
-	# Also add last 10 of trunk-stripped variant
-	if len(without_trunk) > 10:
-		variants.add(without_trunk[-10:])
-	
-	return list(variants)
-
-
 def phones_match(stored: str, incoming: str, default_region: str = "IN") -> bool:
 	"""
 	Robust phone number match that handles trunk-prefix and format variations.
