@@ -54,7 +54,7 @@ def on_update(doc, method):
 			"reference_name": doc.reference_name,
 		},
 		doctype=doc.reference_doctype,
-		name=doc.reference_name,
+		docname=doc.reference_name,
 	)
 
 	notify_agent(doc)
