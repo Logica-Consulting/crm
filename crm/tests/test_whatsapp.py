@@ -149,5 +149,5 @@ class TestOnUpdateRealtime(FrappeTestCase):
 					"reference_name": "CRM-LEAD-001",
 				},
 				doctype="CRM Lead",
-				name="CRM-LEAD-001",
+				docname="CRM-LEAD-001",
 			)
