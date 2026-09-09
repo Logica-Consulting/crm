@@ -115,6 +115,12 @@ class TestPhonesMatch(FrappeTestCase):
 		# Stored as: 541155551234 (without the '9')
 		self.assertTrue(phones_match("5491155551234", "541155551234"))
 
+	def test_contact_without_country_code(self):
+		"""Contact stored without country code still matches webhook number"""
+		# Meta webhook sends: 5216691252211 (with country code 52 and trunk 1)
+		# Stored as: 6691252211 (no country code, no trunk)
+		self.assertTrue(phones_match("5216691252211", "6691252211"))
+
 	def test_different_numbers_no_match(self):
 		"""Different numbers don't match"""
 		self.assertFalse(phones_match("5216691252211", "5216699999999"))
