@@ -68,6 +68,49 @@ def are_same_phone_number(number1: str, number2: str, default_region: str = "IN"
 		return False
 
 
+def _normalize_phone_digits(phone: str) -> str:
+	"""Strip all non-digit characters from a phone number."""
+	if not phone:
+		return ""
+	return "".join(c for c in str(phone) if c.isdigit())
+
+
+def phones_match(stored: str, incoming: str, default_region: str = "IN") -> bool:
+	"""
+	Robust phone number match that handles trunk-prefix and format variations.
+
+	Strategy:
+	  1. Try strict E.164 comparison via are_same_phone_number (handles country code
+	     differences when both numbers parse as valid).
+	  2. Fallback: compare the last 10 digits (subscriber + area). This catches:
+	     - MX mobile trunk prefix '1' (521669... vs 52669...)
+	     - AR mobile trunk prefix '9' (54911... vs 5411...)
+	     - '+' prefix variations (+521669... vs 521669...)
+	     - Any format where the core subscriber number is identical.
+
+	Returns:
+	    bool: True if numbers match, False otherwise.
+	"""
+	if not stored or not incoming:
+		return False
+
+	# Fast path: exact match after stripping non-digits
+	stored_digits = _normalize_phone_digits(stored)
+	incoming_digits = _normalize_phone_digits(incoming)
+	if stored_digits == incoming_digits:
+		return True
+
+	# Strict E.164 comparison
+	if are_same_phone_number(stored, incoming, default_region, validate=True):
+		return True
+
+	# Fallback: compare last 10 digits (handles trunk prefix variations)
+	if len(stored_digits) >= 10 and len(incoming_digits) >= 10:
+		return stored_digits[-10:] == incoming_digits[-10:]
+
+	return False
+
+
 def seconds_to_duration(seconds: float | int) -> str:
 	if not seconds:
 		return "0s"

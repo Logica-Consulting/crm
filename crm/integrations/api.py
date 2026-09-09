@@ -9,7 +9,7 @@ from frappe.query_builder import Order
 from pypika.functions import Replace
 from werkzeug.wrappers import Response
 
-from crm.utils import are_same_phone_number, parse_phone_number
+from crm.utils import _normalize_phone_digits, are_same_phone_number, parse_phone_number, phones_match
 
 
 def _get_recording_credentials(telephony_medium: str) -> tuple | None:
@@ -345,8 +345,8 @@ def get_contact(phone_number: str, country: str = "IN", exact_match: bool = Fals
 				deal = frappe.db.get_value(
 					"CRM Contacts", {"contact": contact.name, "is_primary": 1}, "parent"
 				)
-				if are_same_phone_number(
-					contact.matched_phone, phone_number, country, validate=not exact_match
+				if phones_match(contact.matched_phone, phone_number, country) if not exact_match else (
+					_normalize_phone_digits(contact.matched_phone) == _normalize_phone_digits(phone_number)
 				):
 					contact["deal"] = deal
 					return contact
@@ -368,13 +368,17 @@ def get_contact(phone_number: str, country: str = "IN", exact_match: bool = Fals
 
 	if len(leads):
 		for lead in leads:
-			if are_same_phone_number(lead.mobile_no, phone_number, country, validate=not exact_match):
+			if phones_match(lead.mobile_no, phone_number, country) if not exact_match else (
+				_normalize_phone_digits(lead.mobile_no) == _normalize_phone_digits(phone_number)
+			):
 				lead["lead"] = lead.name
 				lead["full_name"] = lead.lead_name
 				return lead
 
-	if len(contacts) and are_same_phone_number(
-		contacts[0].matched_phone, phone_number, country, validate=not exact_match
+	if len(contacts) and (
+		phones_match(contacts[0].matched_phone, phone_number, country) if not exact_match else (
+			_normalize_phone_digits(contacts[0].matched_phone) == _normalize_phone_digits(phone_number)
+		)
 	):
 		return contacts[0]
 
