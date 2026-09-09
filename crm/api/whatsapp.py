@@ -48,11 +48,13 @@ def validate(doc, method):
 
 def on_update(doc, method):
 	frappe.publish_realtime(
-		"whatsapp_message",
-		{
+		event="whatsapp_message",
+		message={
 			"reference_doctype": doc.reference_doctype,
 			"reference_name": doc.reference_name,
 		},
+		doctype=doc.reference_doctype,
+		name=doc.reference_name,
 	)
 
 	notify_agent(doc)
@@ -108,6 +110,62 @@ def is_whatsapp_installed():
 	if not frappe.db.exists("DocType", "WhatsApp Settings"):
 		return False
 	return True
+
+
+def _get_orphan_messages_by_number(mobile_no: str) -> list:
+	"""
+	Fetch WhatsApp Messages whose from/to matches mobile_no but reference is
+	empty or 'Contact' (orphans from number-matching gaps).
+
+	This is a defensive query that heals existing orphaned messages without
+	requiring a data migration.
+	"""
+	from crm.utils import _normalize_phone_digits
+
+	mobile_digits = _normalize_phone_digits(mobile_no)
+	if len(mobile_digits) < 10:
+		return []
+
+	# Get all WhatsApp Messages with empty or Contact reference
+	all_orphans = frappe.get_all(
+		"WhatsApp Message",
+		filters=[
+			["reference_doctype", "in", ["", "Contact", None]],
+		],
+		fields=[
+			"name",
+			"type",
+			"to",
+			"from",
+			"content_type",
+			"message_type",
+			"attach",
+			"template",
+			"use_template",
+			"message_id",
+			"is_reply",
+			"reply_to_message_id",
+			"creation",
+			"message",
+			"status",
+			"reference_doctype",
+			"reference_name",
+			"template_parameters",
+			"template_header_parameters",
+		],
+	)
+
+	# Filter by number match (last 10 digits)
+	matched = []
+	for msg in all_orphans:
+		from_digits = _normalize_phone_digits(msg.get("from"))
+		to_digits = _normalize_phone_digits(msg.get("to"))
+		if (from_digits and len(from_digits) >= 10 and from_digits[-10:] == mobile_digits[-10:]) or (
+			to_digits and len(to_digits) >= 10 and to_digits[-10:] == mobile_digits[-10:]
+		):
+			matched.append(msg)
+
+	return matched
 
 
 @frappe.whitelist()
@@ -182,6 +240,14 @@ def get_whatsapp_messages(reference_doctype: str, reference_name: str):
 			"template_header_parameters",
 		],
 	)
+
+	# Defensive: include orphan messages whose from/to matches the lead's mobile_no
+	# even if reference_doctype is empty or "Contact" (heals number-matching gaps)
+	if reference_doctype == "CRM Lead":
+		mobile_no = reference_doc.get("mobile_no")
+		if mobile_no:
+			orphan_messages = _get_orphan_messages_by_number(mobile_no)
+			messages += orphan_messages
 
 	# Filter messages to get only Template messages
 	template_messages = [message for message in messages if message["message_type"] == "Template"]
