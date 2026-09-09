@@ -6,6 +6,7 @@ import frappe
 import requests
 from frappe import _
 from frappe.query_builder import Order
+from pypika import Criterion
 from pypika.functions import Replace
 from werkzeug.wrappers import Response
 
@@ -339,7 +340,7 @@ def get_contact(phone_number: str, country: str = "IN", exact_match: bool = Fals
 			ContactPhone.phone.as_("matched_phone"),
 		)
 		.where(ContactPhone.parenttype == "Contact")
-		.where(frappe.qb.or_(*like_conditions))
+		.where(Criterion.any(like_conditions))
 		.orderby(Contact.modified, order=Order.desc)
 	)
 	contacts = query.run(as_dict=True)
@@ -370,7 +371,7 @@ def get_contact(phone_number: str, country: str = "IN", exact_match: bool = Fals
 		frappe.qb.from_(Lead)
 		.select(Lead.name, Lead.lead_name, Lead.image, Lead.mobile_no)
 		.where(Lead.converted == 0)
-		.where(frappe.qb.or_(*like_conditions))
+		.where(Criterion.any(like_conditions))
 		.orderby("modified", order=Order.desc)
 	)
 	leads = query.run(as_dict=True)
