@@ -34,7 +34,7 @@
           v-for="template in filteredTemplates"
           :key="template.name"
           class="flex h-56 cursor-pointer flex-col gap-2 rounded-lg border p-3 hover:bg-surface-gray-2"
-          @click="emit('send', template.name)"
+          @click="selectTemplate(template)"
         >
           <div
             class="border-b pb-2 text-base-semibold truncate"
@@ -65,14 +65,29 @@
       </div>
     </template>
   </Dialog>
+
+  <!-- Variable Mapping Dialog -->
+  <WhatsAppVariableMapping
+    v-if="showMapping"
+    v-model="showMapping"
+    :template-name="selectedTemplate?.name"
+    :template-body="selectedTemplate?.template"
+    :doctype="doctype"
+    :docname="docname"
+    :mobile-no="mobileNo"
+    @send="handleTemplateSend"
+  />
 </template>
 
 <script setup>
 import { TextEditor, createListResource } from 'frappe-ui'
 import { ref, computed, nextTick, watch, onMounted } from 'vue'
+import WhatsAppVariableMapping from './WhatsAppVariableMapping.vue'
 
 const props = defineProps({
   doctype: { type: String, default: '' },
+  docname: { type: String, default: '' },
+  mobileNo: { type: String, default: '' },
 })
 
 const show = defineModel({ type: Boolean })
@@ -81,6 +96,8 @@ const searchInput = ref('')
 const emit = defineEmits(['send'])
 
 const search = ref('')
+const showMapping = ref(false)
+const selectedTemplate = ref(null)
 
 const templates = createListResource({
   type: 'list',
@@ -105,6 +122,16 @@ const filteredTemplates = computed(() => {
     }) ?? []
   )
 })
+
+function selectTemplate(template) {
+  selectedTemplate.value = template
+  showMapping.value = true
+}
+
+function handleTemplateSend(payload) {
+  emit('send', payload)
+  showMapping.value = false
+}
 
 function newWhatsappTemplate() {
   show.value = false
