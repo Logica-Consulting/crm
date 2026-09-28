@@ -362,7 +362,63 @@ def create_whatsapp_message(
 
 
 @frappe.whitelist()
-def send_whatsapp_template(reference_doctype: str, reference_name: str, template: str, to: str):
+def get_template_variables(template: str) -> list[dict]:
+	"""
+	Extrae variables nombradas del body de una plantilla WhatsApp.
+	
+	Args:
+		template: Nombre del documento WhatsApp Templates
+		
+	Returns:
+		Lista de dicts con {name, placeholder} ordenados alfabéticamente
+		
+	Example:
+		get_template_variables("sipra_bienvenida_con_formulario_-es_MX")
+		→ [
+			{"name": "asesor", "placeholder": "{{asesor}}"},
+			{"name": "disciplina", "placeholder": "{{disciplina}}"},
+			{"name": "nombre", "placeholder": "{{nombre}}"}
+		  ]
+	"""
+	import re
+	
+	template_doc = frappe.get_doc("WhatsApp Templates", template)
+	body = template_doc.template or ""
+	
+	# Regex para variables nombradas: solo minúsculas y guiones bajos
+	# Ej: {{nombre}}, {{lead_owner}}, {{custom_field}}
+	# NO match: {{Nombre}}, {{id123}}, {{teléfono}}
+	pattern = r"\{\{([a-z][a-z0-9_]*)\}\}"
+	matches = re.findall(pattern, body)
+	
+	# Eliminar duplicados y ordenar alfabéticamente
+	unique_vars = sorted(set(matches))
+	
+	return [
+		{"name": var, "placeholder": f"{{{{{var}}}}}"}
+		for var in unique_vars
+	]
+
+
+@frappe.whitelist()
+def send_whatsapp_template(
+	reference_doctype: str,
+	reference_name: str,
+	template: str,
+	to: str,
+	body_param: dict | None = None
+):
+	"""
+	Envía plantilla WhatsApp con variables nombradas.
+	
+	Args:
+		reference_doctype: DocType de referencia (ej: "CRM Lead")
+		reference_name: Nombre del documento (ej: "LEAD-001")
+		template: Nombre de WhatsApp Templates
+		to: Número de teléfono destino
+		body_param: Dict con variables nombradas y sus valores
+					Ej: {"nombre": "Juan", "asesor": "María"}
+	"""
 	validate_access(reference_doctype, reference_name)
 	doc = frappe.new_doc("WhatsApp Message")
 	doc.update(
@@ -375,6 +431,7 @@ def send_whatsapp_template(reference_doctype: str, reference_name: str, template
 			"use_template": True,
 			"template": template,
 			"to": to,
+			"body_param": json.dumps(body_param) if body_param else None,
 		}
 	)
 	doc.insert(ignore_permissions=True)
