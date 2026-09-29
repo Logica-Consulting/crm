@@ -617,5 +617,96 @@ def add_roles():
 			update_permission_property(doctype, role, 0, "share", 1)
 			update_permission_property(doctype, role, 0, "email", 1)
 			update_permission_property(doctype, role, 0, "print", 1)
+
+
+@frappe.whitelist()
+def get_whatsapp_template_fields(doctype: str, template_name: str = None) -> dict:
+	"""Return fields for a doctype including custom fields, plus existing mapping if template provided.
+	
+	Used by the WhatsApp variable mapping UI to pre-populate field selections.
+	"""
+	if not any(role in ALLOWED_WHATSAPP_ROLES for role in frappe.get_roles()):
+		frappe.throw(_("Only sales users can access WhatsApp features."), frappe.PermissionError)
+
+	if not isinstance(doctype, str) or not doctype:
+		frappe.throw(_("Invalid doctype."))
+
+	meta = frappe.get_meta(doctype)
+	
+	# Build field list including custom fields
+	fields = []
+	seen_fieldnames = set()
+	
+	for field in meta.fields:
+		fieldname = getattr(field, "fieldname", None)
+		if not fieldname or fieldname in seen_fieldnames:
+			continue
+		if getattr(field, "fieldtype", None) in ("Section Break", "Column Break", "Tab Break"):
+			continue
+		if getattr(field, "hidden", 0):
+			continue
+		
+		seen_fieldnames.add(fieldname)
+		fields.append({
+			"fieldname": fieldname,
+			"label": getattr(field, "label", None) or fieldname,
+			"fieldtype": getattr(field, "fieldtype", None),
+		})
+	
+	# Also include custom fields from Custom Field doctype
+	custom_fields = frappe.get_all(
+		"Custom Field",
+		filters={"dt": doctype},
+		fields=["fieldname", "label", "fieldtype"],
+	)
+	for cf in custom_fields:
+		fieldname = cf.get("fieldname")
+		if fieldname and fieldname not in seen_fieldnames:
+			seen_fieldnames.add(fieldname)
+			fields.append({
+				"fieldname": fieldname,
+				"label": cf.get("label") or fieldname,
+				"fieldtype": cf.get("fieldtype"),
+			})
+	
+	# Load existing mapping if template provided
+	existing_mapping = {}
+	if template_name:
+		try:
+			template = frappe.get_doc("WhatsApp Templates", template_name)
+			if template.named_field_mapping:
+				existing_mapping = json.loads(template.named_field_mapping)
+		except Exception:
+			pass
+	
+	return {"fields": fields, "existing_mapping": existing_mapping}
+
+
+@frappe.whitelist()
+def save_whatsapp_template_mapping(template_name: str, field_mapping: dict | str) -> dict:
+	"""Save the field mapping for a WhatsApp template.
+	
+	field_mapping: JSON object mapping variable names to fieldnames, e.g. {"nombre": "lead_name"}
+	"""
+	if not any(role in ALLOWED_WHATSAPP_ROLES for role in frappe.get_roles()):
+		frappe.throw(_("Only sales users can access WhatsApp features."), frappe.PermissionError)
+
+	if not isinstance(template_name, str) or not template_name:
+		frappe.throw(_("Invalid template name."))
+
+	if isinstance(field_mapping, str):
+		try:
+			field_mapping = json.loads(field_mapping)
+		except json.JSONDecodeError:
+			frappe.throw(_("Invalid field mapping JSON."))
+
+	if not isinstance(field_mapping, dict):
+		frappe.throw(_("Field mapping must be a JSON object."))
+
+	template = frappe.get_doc("WhatsApp Templates", template_name)
+	template.named_field_mapping = json.dumps(field_mapping)
+	template.save(ignore_permissions=True)
+	
+	return {"success": True, "mapping": field_mapping}
 			update_permission_property(doctype, role, 0, "report", 1)
 			update_permission_property(doctype, role, 0, "export", 1)

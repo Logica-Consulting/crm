@@ -34,6 +34,15 @@
           </div>
         </div>
 
+        <div v-if="hasExistingMapping" class="mb-3 rounded-lg border border-green-200 bg-green-50 p-2">
+          <div class="flex items-center gap-2 text-sm text-green-700">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+            </svg>
+            {{ __('Using saved field mapping') }}
+          </div>
+        </div>
+
         <div class="space-y-3">
           <div
             v-for="variable in variables"
@@ -101,14 +110,40 @@ const variables = ref([])
 const fieldMapping = ref({})
 const docFields = ref([])
 const docValues = ref({})
+const existingMapping = ref({})
+
+const getFieldsResource = createResource({
+  url: 'crm.api.whatsapp.get_whatsapp_template_fields',
+  onSuccess: (data) => {
+    if (data?.fields) {
+      docFields.value = data.fields.map((f) => ({
+        label: f.label || f.fieldname,
+        value: f.fieldname,
+      }))
+    }
+    if (data?.existing_mapping) {
+      existingMapping.value = data.existing_mapping
+      // Pre-populate field mapping with existing values
+      variables.value.forEach((v) => {
+        if (existingMapping.value[v.name]) {
+          fieldMapping.value[v.name] = existingMapping.value[v.name]
+        }
+      })
+    }
+    loading.value = false
+  },
+  onError: () => {
+    loading.value = false
+  },
+})
 
 const getVariablesResource = createResource({
   url: 'crm.api.whatsapp.get_template_variables',
   onSuccess: (data) => {
     variables.value = data || []
-    // Initialize field mapping
+    // Initialize field mapping with existing values if available
     variables.value.forEach((v) => {
-      fieldMapping.value[v.name] = ''
+      fieldMapping.value[v.name] = existingMapping.value[v.name] || ''
     })
     loading.value = false
   },
@@ -117,46 +152,22 @@ const getVariablesResource = createResource({
   },
 })
 
-const getDocFieldsResource = createResource({
+const getDocValuesResource = createResource({
   url: 'frappe.client.get',
   onSuccess: (data) => {
-    if (data && data.fields) {
-      docFields.value = data.fields
-        .filter(
-          (f) =>
-            f.fieldtype &&
-            !['Section Break', 'Column Break', 'Tab Break'].includes(
-              f.fieldtype,
-            ) &&
-            f.fieldname,
-        )
-        .map((f) => ({
-          label: f.label || f.fieldname,
-          value: f.fieldname,
-        }))
-    }
-    // Get doc values for preview
-    if (props.docname) {
-      createResource({
-        url: 'frappe.client.get',
-        params: {
-          doctype: props.doctype,
-          name: props.docname,
-        },
-        auto: true,
-        onSuccess: (docData) => {
-          docValues.value = docData || {}
-        },
-      }).fetch()
-    }
+    docValues.value = data || {}
   },
+})
+
+const saveMappingResource = createResource({
+  url: 'crm.api.whatsapp.save_whatsapp_template_mapping',
 })
 
 watch(
   () => props.templateName,
   (newVal) => {
     if (newVal && show.value) {
-      loadTemplateVariables()
+      loadData()
     }
   },
   { immediate: true },
@@ -164,28 +175,41 @@ watch(
 
 watch(show, (newVal) => {
   if (newVal && props.templateName) {
-    loadTemplateVariables()
+    loadData()
   }
 })
 
-function loadTemplateVariables() {
+function loadData() {
   loading.value = true
   variables.value = []
   fieldMapping.value = {}
+  existingMapping.value = {}
 
+  // Load fields and existing mapping together
+  getFieldsResource.fetch({
+    doctype: props.doctype,
+    template_name: props.templateName,
+  })
+
+  // Load template variables
   getVariablesResource.fetch({ template: props.templateName })
 
-  // Load doc fields for mapping
-  if (!docFields.value.length) {
-    getDocFieldsResource.fetch({
-      doctype: 'DocType',
-      name: props.doctype,
+  // Load doc values for preview
+  if (props.docname) {
+    getDocValuesResource.fetch({
+      doctype: props.doctype,
+      name: props.docname,
     })
   }
 }
 
 const fieldOptions = computed(() => {
   return [{ label: __('-- Select field --'), value: '' }, ...docFields.value]
+})
+
+const hasExistingMapping = computed(() => {
+  return Object.keys(existingMapping.value).length > 0 &&
+    variables.value.some((v) => existingMapping.value[v.name])
 })
 
 function getPreviewValue(varName) {
@@ -210,10 +234,22 @@ const isMappingComplete = computed(() => {
 
 function sendWithVariables() {
   const bodyParam = {}
+  const newMapping = {}
   variables.value.forEach((v) => {
     const fieldName = fieldMapping.value[v.name]
     bodyParam[v.name] = docValues.value[fieldName] || ''
+    newMapping[v.name] = fieldName
   })
+
+  // Save mapping if it changed
+  const mappingChanged = JSON.stringify(newMapping) !== JSON.stringify(existingMapping.value)
+  if (mappingChanged) {
+    saveMappingResource.fetch({
+      template_name: props.templateName,
+      field_mapping: newMapping,
+    })
+  }
+
   emit('send', {
     template: props.templateName,
     body_param: bodyParam,
