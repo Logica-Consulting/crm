@@ -1,4 +1,7 @@
 import json
+import math
+from datetime import date, datetime, time
+from decimal import Decimal
 
 import frappe
 from frappe import _
@@ -9,6 +12,26 @@ from crm.fcrm.doctype.crm_notification.crm_notification import notify_user
 from crm.integrations.api import get_contact_lead_or_deal_from_number
 
 ALLOWED_WHATSAPP_ROLES = ["System Manager", "Sales Manager", "Sales User"]
+
+WHATSAPP_PREVIEW_DOCTYPES = {"CRM Lead", "CRM Deal"}
+WHATSAPP_PREVIEW_FIELD_TYPES = {
+	"Check",
+	"Currency",
+	"Data",
+	"Date",
+	"Datetime",
+	"Float",
+	"Int",
+	"Link",
+	"Long Text",
+	"Percent",
+	"Select",
+	"Small Text",
+	"Text",
+	"Time",
+}
+WHATSAPP_PREVIEW_DENIED_MESSAGE = "Not permitted to preview fields for this record."
+_UNSERIALIZABLE_WHATSAPP_PREVIEW_VALUE = object()
 
 
 def validate_access(reference_doctype=None, reference_name=None, permtype="read"):
@@ -398,6 +421,92 @@ def get_template_variables(template: str) -> list[dict]:
 		{"name": var, "placeholder": f"{{{{{var}}}}}"}
 		for var in unique_vars
 	]
+
+
+def _deny_whatsapp_preview_access():
+	frappe.throw(_(WHATSAPP_PREVIEW_DENIED_MESSAGE), frappe.PermissionError)
+
+
+def _serialize_whatsapp_preview_value(value):
+	"""Return only JSON-friendly scalar values for the preview contract."""
+	if value is None:
+		return value
+	if type(value) in (str, int, bool):
+		return value
+	if type(value) is float:
+		return value if math.isfinite(value) else _UNSERIALIZABLE_WHATSAPP_PREVIEW_VALUE
+	if isinstance(value, (datetime, date, time)):
+		return value.isoformat()
+	if isinstance(value, Decimal):
+		return format(value, "f")
+	return _UNSERIALIZABLE_WHATSAPP_PREVIEW_VALUE
+
+
+@frappe.whitelist()
+def get_whatsapp_preview_fields(reference_doctype: str, reference_name: str) -> dict:
+	"""Return a minimal, permission-scoped field/value snapshot for CRM preview."""
+	if not any(role in ALLOWED_WHATSAPP_ROLES for role in frappe.get_roles()):
+		_deny_whatsapp_preview_access()
+
+	if (
+		not isinstance(reference_doctype, str)
+		or reference_doctype not in WHATSAPP_PREVIEW_DOCTYPES
+		or not isinstance(reference_name, str)
+		or not reference_name.strip()
+	):
+		_deny_whatsapp_preview_access()
+
+	try:
+		doc = frappe.get_doc(reference_doctype, reference_name)
+	except frappe.DoesNotExistError:
+		# Use the same response as a record permission denial to avoid leaking existence.
+		_deny_whatsapp_preview_access()
+
+	if not doc.has_permission("read"):
+		_deny_whatsapp_preview_access()
+
+	meta = frappe.get_meta(reference_doctype)
+	get_permitted_fieldnames = getattr(meta, "get_permitted_fieldnames", None)
+	if not callable(get_permitted_fieldnames):
+		# Metadata alone is not a field-level authorization check.
+		_deny_whatsapp_preview_access()
+
+	try:
+		permitted_fieldnames = set(
+			get_permitted_fieldnames(
+				user=frappe.session.user,
+				permission_type="read",
+				with_virtual_fields=False,
+			)
+		)
+	except Exception:
+		# Permission API failures fail closed; never fall back to get_meta alone.
+		_deny_whatsapp_preview_access()
+
+	fields = []
+	for field in meta.fields:
+		fieldname = getattr(field, "fieldname", None)
+		if not fieldname or fieldname not in permitted_fieldnames:
+			continue
+		if getattr(field, "fieldtype", None) not in WHATSAPP_PREVIEW_FIELD_TYPES:
+			continue
+		if getattr(field, "hidden", 0) or getattr(field, "is_virtual", 0):
+			continue
+		if getattr(field, "mask", None):
+			continue
+		value = _serialize_whatsapp_preview_value(doc.get(fieldname))
+		if value is _UNSERIALIZABLE_WHATSAPP_PREVIEW_VALUE:
+			continue
+
+		fields.append(
+			{
+				"fieldname": fieldname,
+				"label": getattr(field, "label", None) or fieldname,
+				"value": value,
+			}
+		)
+
+	return {"fields": fields}
 
 
 @frappe.whitelist()
