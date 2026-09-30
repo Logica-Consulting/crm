@@ -708,5 +708,3 @@ def save_whatsapp_template_mapping(template_name: str, field_mapping: dict | str
 	template.save(ignore_permissions=True)
 	
 	return {"success": True, "mapping": field_mapping}
-			update_permission_property(doctype, role, 0, "report", 1)
-			update_permission_property(doctype, role, 0, "export", 1)
