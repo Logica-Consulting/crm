@@ -228,14 +228,32 @@ const hasExistingMapping = computed(() => {
     variables.value.some((v) => existingMapping.value[v.name])
 })
 
+function getSavedVariableConfig(varName) {
+  const savedValue = existingMapping.value[varName]
+
+  if (savedValue && typeof savedValue === 'object') {
+    return {
+      source: savedValue.source === 'manual' ? 'manual' : 'field',
+      field: savedValue.field || '',
+    }
+  }
+
+  return {
+    source: 'field',
+    field: savedValue || '',
+  }
+}
+
 function initVariableInput(variable) {
+  const savedConfig = getSavedVariableConfig(variable.name)
+
   if (!valueSource.value[variable.name]) {
-    valueSource.value[variable.name] = 'field'
+    valueSource.value[variable.name] = savedConfig.source
   }
 
   if (valueSource.value[variable.name] !== 'manual') {
     fieldMapping.value[variable.name] =
-      existingMapping.value[variable.name] || fieldMapping.value[variable.name] || ''
+      savedConfig.field || fieldMapping.value[variable.name] || ''
   }
 
   if (manualValues.value[variable.name] === undefined) {
@@ -284,12 +302,13 @@ function sendWithVariables() {
   variables.value.forEach((v) => {
     if (valueSource.value[v.name] === 'manual') {
       bodyParam[v.name] = manualValues.value[v.name] || ''
+      newMapping[v.name] = { source: 'manual' }
       return
     }
 
     const fieldName = fieldMapping.value[v.name]
     bodyParam[v.name] = docValues.value[fieldName] || ''
-    newMapping[v.name] = fieldName
+    newMapping[v.name] = { source: 'field', field: fieldName }
   })
 
   // Save mapping if it changed
