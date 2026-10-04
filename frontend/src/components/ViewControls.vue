@@ -981,7 +981,7 @@ async function openLostReasonDialog(dealName) {
   if (!result || !result.lost_reason) return
 
   try {
-    await call('comercial.comercial.api.pipeline.mark_as_lost', {
+    await call('comercial.api.pipeline.mark_as_lost', {
       deal_name: dealName,
       lost_reason: result.lost_reason,
       lost_notes: result.lost_notes || '',
@@ -1006,7 +1006,7 @@ async function openReversalReasonDialog(dealName, fromStatus, toStatus) {
         label: __('Reason for reversal'),
         description: __(
           'This deal is being moved from {0} back to {1}. Please provide a reason.',
-          [fromStatus, toStatus]
+          [fromStatus, toStatus],
         ),
         required: 1,
       },
@@ -1020,7 +1020,7 @@ async function openReversalReasonDialog(dealName, fromStatus, toStatus) {
 
   try {
     // Reverse atomically: status + reason comment in a single server call.
-    await call('comercial.comercial.api.pipeline.reverse_deal', {
+    await call('comercial.api.pipeline.reverse_deal', {
       deal: dealName,
       target_status: toStatus,
       reason: result.reversal_reason,
@@ -1038,7 +1038,9 @@ async function openReversalReasonDialog(dealName, fromStatus, toStatus) {
 function updateKanbanSettings(data) {
   if (data.item && data.to) {
     // Intercept Perdido drag on CRM Deal pipeline kanban → prompt lost_reason
-    if (shouldInterceptPerdido(props.doctype, view.value.column_field, data.to)) {
+    if (
+      shouldInterceptPerdido(props.doctype, view.value.column_field, data.to)
+    ) {
       openLostReasonDialog(data.item)
       return
     }
@@ -1052,7 +1054,7 @@ function updateKanbanSettings(data) {
         data.from,
         data.to,
         getDealStatus(data.from)?.type,
-        getDealStatus(data.to)?.type
+        getDealStatus(data.to)?.type,
       )
     ) {
       openReversalReasonDialog(data.item, data.from, data.to)

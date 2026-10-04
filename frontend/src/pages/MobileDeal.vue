@@ -293,6 +293,11 @@ import SidePanelLayout from '@/components/SidePanelLayout.vue'
 import SLASection from '@/components/SLASection.vue'
 import CustomActions from '@/components/CustomActions.vue'
 import { setupCustomizations, isTranslatable } from '@/utils'
+import {
+  createRollbackOnError,
+  showPipelineChangeConfirmation,
+} from '@/utils/pipelineChange'
+import { renderFieldLayoutDialog } from '@/utils/renderFieldLayoutDialog'
 import { getView } from '@/utils/view'
 import { getSettings } from '@/stores/settings'
 import { globalStore } from '@/stores/global'
@@ -602,9 +607,18 @@ const dealContacts = createResource({
   },
 })
 
-function updateField(name, value) {
+async function updateField(name, value) {
+  // Store original values for rollback if needed
+  const originalValues = {}
+  if (Array.isArray(name)) {
+    name.forEach((field) => {
+      originalValues[field] = doc.value[field]
+    })
+  } else {
+    originalValues[name] = doc.value[name]
+  }
+
   value = Array.isArray(name) ? '' : value
-  let oldValues = Array.isArray(name) ? {} : doc.value[name]
 
   if (Array.isArray(name)) {
     name.forEach((field) => (doc.value[field] = value))
@@ -614,14 +628,11 @@ function updateField(name, value) {
 
   document.save.submit(null, {
     onSuccess: () => (reload.value = true),
-    onError: (err) => {
-      if (Array.isArray(name)) {
-        name.forEach((field) => (doc.value[field] = oldValues[field]))
-      } else {
-        doc.value[name] = oldValues
-      }
-      toast.error(err.messages?.[0] || __('Error updating field'))
-    },
+    onError: createRollbackOnError(
+      () => doc.value,
+      originalValues,
+      (err) => toast.error(err.messages?.[0] || __('Error updating field')),
+    ),
   })
 }
 
@@ -635,34 +646,93 @@ function statusLabel(status) {
 }
 
 async function triggerStatusChange(value) {
-  await triggerOnChange('status', value)
-  setLostReason()
+  const oldStatus = doc.value.status
+  try {
+    await triggerOnChange('status', value)
+  } catch (error) {
+    doc.value.status = oldStatus
+    toast.error(error.messages?.[0] || __('Error updating status'))
+    return
+  }
+  setLostReason(oldStatus)
 }
 
 const showLostReasonModal = ref(false)
 
-function setLostReason() {
+function setLostReason(previousStatus = document.originalDoc?.status) {
   if (
     getDealStatus(doc.value.status).type !== 'Lost' ||
     (doc.value.lost_reason && doc.value.lost_reason !== 'Other') ||
     (doc.value.lost_reason === 'Other' && doc.value.lost_notes)
   ) {
-    document.save.submit()
+    document.save.submit(null, {
+      onError: createRollbackOnError(
+        () => doc.value,
+        { status: previousStatus },
+        (err) => toast.error(err.messages?.[0] || __('Error updating status')),
+      ),
+    })
     return
   }
 
   showLostReasonModal.value = true
 }
 
-function beforeStatusChange(data) {
+async function beforeStatusChange(data, oldValue) {
+  const previousStatus = oldValue ?? document.originalDoc?.status
+  if (Object.hasOwn(data ?? {}, 'comercial_pipeline')) {
+    const oldPipeline = oldValue
+    const newPipeline = data.comercial_pipeline
+    const previousValues = {
+      comercial_pipeline: oldPipeline,
+      status: doc.value.status,
+    }
+
+    if (oldPipeline && oldPipeline !== newPipeline) {
+      const confirmed = await showPipelineChangeConfirmation(
+        oldPipeline,
+        newPipeline,
+        renderFieldLayoutDialog,
+      )
+      if (!confirmed) return
+    }
+
+    try {
+      await triggerOnChange('comercial_pipeline', newPipeline)
+    } catch (error) {
+      Object.assign(doc.value, previousValues)
+      toast.error(error.messages?.[0] || __('Error updating pipeline'))
+      return
+    }
+
+    document.save.submit(null, {
+      onSuccess: () => reloadAssignees(data),
+      onError: createRollbackOnError(
+        () => doc.value,
+        previousValues,
+        (err) =>
+          toast.error(err.messages?.[0] || __('Error updating pipeline')),
+      ),
+    })
+    return
+  }
+
   if (
     Object.hasOwn(data ?? {}, 'status') &&
     getDealStatus(data.status).type == 'Lost'
   ) {
-    setLostReason()
+    setLostReason(previousStatus)
   } else {
     document.save.submit(null, {
       onSuccess: () => reloadAssignees(data),
+      onError: Object.hasOwn(data ?? {}, 'status')
+        ? createRollbackOnError(
+            () => doc.value,
+            { status: previousStatus },
+            (err) =>
+              toast.error(err.messages?.[0] || __('Error updating status')),
+          )
+        : undefined,
     })
   }
 }

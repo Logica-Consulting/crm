@@ -566,12 +566,20 @@ const attrs = instance?.vnode?.props ?? {}
 async function fieldChange(value, df) {
   if (props.preview) return
 
-  await triggerOnChange(df.fieldname, value)
-
+  const oldValue = doc.value[df.fieldname]
   const hasListener = attrs['onBeforeFieldChange'] !== undefined
 
+  // Pipeline changes need confirmation against the persisted old value. Do not
+  // trigger the document script until the page-level confirmation is accepted.
+  if (df.fieldname === 'comercial_pipeline' && hasListener) {
+    emit('beforeFieldChange', { [df.fieldname]: value }, oldValue)
+    return
+  }
+
+  await triggerOnChange(df.fieldname, value)
+
   if (hasListener) {
-    emit('beforeFieldChange', { [df.fieldname]: value })
+    emit('beforeFieldChange', { [df.fieldname]: value }, oldValue)
   } else {
     document.save.submit(null, {
       onSuccess: () => emit('afterFieldChange', { [df.fieldname]: value }),
