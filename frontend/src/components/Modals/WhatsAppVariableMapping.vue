@@ -55,10 +55,23 @@
               </code>
             </div>
             <Select
+              v-model="valueSource[variable.name]"
+              class="w-36 shrink-0"
+              :options="valueSourceOptions"
+            />
+            <Select
+              v-if="valueSource[variable.name] !== 'manual'"
               v-model="fieldMapping[variable.name]"
               class="flex-1"
               :options="fieldOptions"
               :placeholder="__('Select a field')"
+            />
+            <input
+              v-else
+              v-model="manualValues[variable.name]"
+              type="text"
+              class="flex-1 rounded-md border border-outline-gray-2 bg-surface-white px-3 py-1.5 text-base text-ink-gray-8 placeholder:text-ink-gray-4 focus:border-outline-gray-4 focus:outline-none"
+              :placeholder="__('Type a value')"
             />
             <div class="w-40 shrink-0 truncate text-sm text-ink-gray-5">
               {{ getPreviewValue(variable.name) }}
@@ -108,6 +121,8 @@ const emit = defineEmits(['send'])
 const loading = ref(false)
 const variables = ref([])
 const fieldMapping = ref({})
+const valueSource = ref({})
+const manualValues = ref({})
 const docFields = ref([])
 const docValues = ref({})
 const existingMapping = ref({})
@@ -124,11 +139,7 @@ const getFieldsResource = createResource({
     if (data?.existing_mapping) {
       existingMapping.value = data.existing_mapping
       // Pre-populate field mapping with existing values
-      variables.value.forEach((v) => {
-        if (existingMapping.value[v.name]) {
-          fieldMapping.value[v.name] = existingMapping.value[v.name]
-        }
-      })
+      variables.value.forEach((v) => initVariableInput(v))
     }
     loading.value = false
   },
@@ -142,9 +153,7 @@ const getVariablesResource = createResource({
   onSuccess: (data) => {
     variables.value = data || []
     // Initialize field mapping with existing values if available
-    variables.value.forEach((v) => {
-      fieldMapping.value[v.name] = existingMapping.value[v.name] || ''
-    })
+    variables.value.forEach((v) => initVariableInput(v))
     loading.value = false
   },
   onError: () => {
@@ -183,6 +192,8 @@ function loadData() {
   loading.value = true
   variables.value = []
   fieldMapping.value = {}
+  valueSource.value = {}
+  manualValues.value = {}
   existingMapping.value = {}
 
   // Load fields and existing mapping together
@@ -207,15 +218,43 @@ const fieldOptions = computed(() => {
   return [{ label: __('-- Select field --'), value: '' }, ...docFields.value]
 })
 
+const valueSourceOptions = computed(() => [
+  { label: __('Lead field'), value: 'field' },
+  { label: __('Manual value'), value: 'manual' },
+])
+
 const hasExistingMapping = computed(() => {
   return Object.keys(existingMapping.value).length > 0 &&
     variables.value.some((v) => existingMapping.value[v.name])
 })
 
-function getPreviewValue(varName) {
+function initVariableInput(variable) {
+  if (!valueSource.value[variable.name]) {
+    valueSource.value[variable.name] = 'field'
+  }
+
+  if (valueSource.value[variable.name] !== 'manual') {
+    fieldMapping.value[variable.name] =
+      existingMapping.value[variable.name] || fieldMapping.value[variable.name] || ''
+  }
+
+  if (manualValues.value[variable.name] === undefined) {
+    manualValues.value[variable.name] = ''
+  }
+}
+
+function getVariableValue(varName) {
+  if (valueSource.value[varName] === 'manual') {
+    return manualValues.value[varName] || ''
+  }
+
   const fieldName = fieldMapping.value[varName]
   if (!fieldName || !docValues.value) return ''
   return docValues.value[fieldName] || ''
+}
+
+function getPreviewValue(varName) {
+  return getVariableValue(varName)
 }
 
 const previewText = computed(() => {
@@ -229,13 +268,25 @@ const previewText = computed(() => {
 })
 
 const isMappingComplete = computed(() => {
-  return variables.value.every((v) => fieldMapping.value[v.name])
+  return variables.value.every((v) => {
+    if (valueSource.value[v.name] === 'manual') {
+      return manualValues.value[v.name]?.trim()
+    }
+    return fieldMapping.value[v.name]
+  })
 })
 
 function sendWithVariables() {
   const bodyParam = {}
   const newMapping = {}
+  Object.assign(newMapping, existingMapping.value)
+
   variables.value.forEach((v) => {
+    if (valueSource.value[v.name] === 'manual') {
+      bodyParam[v.name] = manualValues.value[v.name] || ''
+      return
+    }
+
     const fieldName = fieldMapping.value[v.name]
     bodyParam[v.name] = docValues.value[fieldName] || ''
     newMapping[v.name] = fieldName
