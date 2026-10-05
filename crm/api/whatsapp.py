@@ -33,6 +33,16 @@ WHATSAPP_PREVIEW_FIELD_TYPES = {
 WHATSAPP_PREVIEW_DENIED_MESSAGE = "Not permitted to preview fields for this record."
 _UNSERIALIZABLE_WHATSAPP_PREVIEW_VALUE = object()
 
+WHATSAPP_ADVISOR_OWNER_FIELDS = {
+	"CRM Lead": "lead_owner",
+	"CRM Deal": "deal_owner",
+}
+
+WHATSAPP_DERIVED_FIELDS = {
+	"__assigned_advisor_full_name": "Assigned Advisor Full Name",
+	"__assigned_advisor_first_name": "Assigned Advisor First Name",
+}
+
 
 def validate_access(reference_doctype=None, reference_name=None, permtype="read"):
 	if not any(role in ALLOWED_WHATSAPP_ROLES for role in frappe.get_roles()):
@@ -442,6 +452,163 @@ def _serialize_whatsapp_preview_value(value):
 	return _UNSERIALIZABLE_WHATSAPP_PREVIEW_VALUE
 
 
+def _get_doc_doctype(doc):
+	return getattr(doc, "doctype", None) or doc.get("doctype")
+
+
+def _get_assigned_advisor_user(doc):
+	owner_field = WHATSAPP_ADVISOR_OWNER_FIELDS.get(_get_doc_doctype(doc))
+	if not owner_field:
+		return None
+	return doc.get(owner_field)
+
+
+def _get_user_name_parts(user):
+	"""Return advisor full and first name with safe fallbacks."""
+	if not user:
+		return "", ""
+
+	user_info = frappe.db.get_value(
+		"User",
+		user,
+		["full_name", "first_name", "last_name"],
+		as_dict=True,
+	)
+	if not user_info:
+		return user, user
+
+	full_name = (user_info.get("full_name") or "").strip()
+	first_name = (user_info.get("first_name") or "").strip()
+	last_name = (user_info.get("last_name") or "").strip()
+
+	if not full_name:
+		full_name = " ".join(name for name in [first_name, last_name] if name).strip()
+	if not full_name:
+		full_name = user
+
+	if not first_name:
+		first_name = full_name.split()[0] if full_name else user
+
+	return full_name, first_name
+
+
+def _resolve_whatsapp_field_value(doc, fieldname):
+	"""Resolve both stored DocType fields and WhatsApp-only derived fields."""
+	if fieldname not in WHATSAPP_DERIVED_FIELDS:
+		return doc.get(fieldname)
+
+	full_name, first_name = _get_user_name_parts(_get_assigned_advisor_user(doc))
+	if fieldname == "__assigned_advisor_full_name":
+		return full_name
+	if fieldname == "__assigned_advisor_first_name":
+		return first_name
+	return None
+
+
+def _get_template_named_field_mapping(template_name):
+	if not template_name:
+		return {}
+
+	try:
+		template = frappe.get_doc("WhatsApp Templates", template_name)
+		if not template.named_field_mapping:
+			return {}
+		mapping = json.loads(template.named_field_mapping)
+	except Exception:
+		return {}
+
+	return mapping if isinstance(mapping, dict) else {}
+
+
+def _get_mapping_fieldname(mapping_config):
+	if isinstance(mapping_config, str):
+		return mapping_config or None
+	if not isinstance(mapping_config, dict):
+		return None
+	if mapping_config.get("source") == "manual":
+		return None
+	fieldname = mapping_config.get("field")
+	return fieldname if isinstance(fieldname, str) and fieldname else None
+
+
+def _get_whatsapp_visible_field_snapshots(doc, reference_doctype=None):
+	"""Return fields that WhatsApp preview and saved mapping sends may resolve."""
+	reference_doctype = reference_doctype or _get_doc_doctype(doc)
+	if reference_doctype not in WHATSAPP_PREVIEW_DOCTYPES:
+		return []
+
+	meta = frappe.get_meta(reference_doctype)
+	get_permitted_fieldnames = getattr(meta, "get_permitted_fieldnames", None)
+	if not callable(get_permitted_fieldnames):
+		return None
+
+	try:
+		permitted_fieldnames = set(
+			get_permitted_fieldnames(
+				user=frappe.session.user,
+				permission_type="read",
+				with_virtual_fields=False,
+			)
+		)
+	except Exception:
+		return None
+
+	fields = []
+	for field in meta.fields:
+		fieldname = getattr(field, "fieldname", None)
+		if not fieldname or fieldname not in permitted_fieldnames:
+			continue
+		if getattr(field, "fieldtype", None) not in WHATSAPP_PREVIEW_FIELD_TYPES:
+			continue
+		if getattr(field, "hidden", 0) or getattr(field, "is_virtual", 0):
+			continue
+		if getattr(field, "mask", None):
+			continue
+
+		value = _serialize_whatsapp_preview_value(_resolve_whatsapp_field_value(doc, fieldname))
+		if value is _UNSERIALIZABLE_WHATSAPP_PREVIEW_VALUE:
+			continue
+
+		fields.append(
+			{
+				"fieldname": fieldname,
+				"label": getattr(field, "label", None) or fieldname,
+				"value": value,
+			}
+		)
+
+	owner_field = WHATSAPP_ADVISOR_OWNER_FIELDS.get(reference_doctype)
+	owner_meta_field = meta.get_field(owner_field) if owner_field else None
+	if (
+		owner_field
+		and owner_field in permitted_fieldnames
+		and owner_meta_field
+		and not getattr(owner_meta_field, "mask", None)
+	):
+		for fieldname, label in WHATSAPP_DERIVED_FIELDS.items():
+			value = _serialize_whatsapp_preview_value(_resolve_whatsapp_field_value(doc, fieldname))
+			if value is _UNSERIALIZABLE_WHATSAPP_PREVIEW_VALUE:
+				continue
+			fields.append({"fieldname": fieldname, "label": label, "value": value})
+
+	return fields
+
+
+def _build_whatsapp_body_param_from_mapping(doc, template_name):
+	visible_fields = _get_whatsapp_visible_field_snapshots(doc) or []
+	visible_values = {field["fieldname"]: field.get("value") for field in visible_fields}
+	body_param = {}
+	for variable_name, mapping_config in _get_template_named_field_mapping(template_name).items():
+		fieldname = _get_mapping_fieldname(mapping_config)
+		if not fieldname or fieldname not in visible_values:
+			continue
+
+		value = visible_values[fieldname]
+		body_param[variable_name] = "" if value is None else value
+
+	return body_param or None
+
+
 @frappe.whitelist()
 def get_whatsapp_preview_fields(reference_doctype: str, reference_name: str) -> dict:
 	"""Return a minimal, permission-scoped field/value snapshot for CRM preview."""
@@ -465,46 +632,10 @@ def get_whatsapp_preview_fields(reference_doctype: str, reference_name: str) -> 
 	if not doc.has_permission("read"):
 		_deny_whatsapp_preview_access()
 
-	meta = frappe.get_meta(reference_doctype)
-	get_permitted_fieldnames = getattr(meta, "get_permitted_fieldnames", None)
-	if not callable(get_permitted_fieldnames):
-		# Metadata alone is not a field-level authorization check.
-		_deny_whatsapp_preview_access()
-
-	try:
-		permitted_fieldnames = set(
-			get_permitted_fieldnames(
-				user=frappe.session.user,
-				permission_type="read",
-				with_virtual_fields=False,
-			)
-		)
-	except Exception:
+	fields = _get_whatsapp_visible_field_snapshots(doc, reference_doctype)
+	if fields is None:
 		# Permission API failures fail closed; never fall back to get_meta alone.
 		_deny_whatsapp_preview_access()
-
-	fields = []
-	for field in meta.fields:
-		fieldname = getattr(field, "fieldname", None)
-		if not fieldname or fieldname not in permitted_fieldnames:
-			continue
-		if getattr(field, "fieldtype", None) not in WHATSAPP_PREVIEW_FIELD_TYPES:
-			continue
-		if getattr(field, "hidden", 0) or getattr(field, "is_virtual", 0):
-			continue
-		if getattr(field, "mask", None):
-			continue
-		value = _serialize_whatsapp_preview_value(doc.get(fieldname))
-		if value is _UNSERIALIZABLE_WHATSAPP_PREVIEW_VALUE:
-			continue
-
-		fields.append(
-			{
-				"fieldname": fieldname,
-				"label": getattr(field, "label", None) or fieldname,
-				"value": value,
-			}
-		)
 
 	return {"fields": fields}
 
@@ -528,7 +659,10 @@ def send_whatsapp_template(
 		body_param: Dict con variables nombradas y sus valores
 					Ej: {"nombre": "Juan", "asesor": "María"}
 	"""
-	validate_access(reference_doctype, reference_name)
+	reference_doc = validate_access(reference_doctype, reference_name)
+	if not body_param:
+		body_param = _build_whatsapp_body_param_from_mapping(reference_doc, template)
+
 	doc = frappe.new_doc("WhatsApp Message")
 	doc.update(
 		{
@@ -668,6 +802,16 @@ def get_whatsapp_template_fields(doctype: str, template_name: str = None) -> dic
 				"label": cf.get("label") or fieldname,
 				"fieldtype": cf.get("fieldtype"),
 			})
+
+	if doctype in WHATSAPP_ADVISOR_OWNER_FIELDS:
+		for fieldname, label in WHATSAPP_DERIVED_FIELDS.items():
+			if fieldname not in seen_fieldnames:
+				seen_fieldnames.add(fieldname)
+				fields.append({
+					"fieldname": fieldname,
+					"label": label,
+					"fieldtype": "Data",
+				})
 	
 	# Load existing mapping if template provided
 	existing_mapping = {}

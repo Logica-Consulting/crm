@@ -162,9 +162,13 @@ const getVariablesResource = createResource({
 })
 
 const getDocValuesResource = createResource({
-  url: 'frappe.client.get',
+  url: 'crm.api.whatsapp.get_whatsapp_preview_fields',
   onSuccess: (data) => {
-    docValues.value = data || {}
+    const values = {}
+    ;(data?.fields || []).forEach((field) => {
+      values[field.fieldname] = field.value
+    })
+    docValues.value = values
   },
 })
 
@@ -208,8 +212,8 @@ function loadData() {
   // Load doc values for preview
   if (props.docname) {
     getDocValuesResource.fetch({
-      doctype: props.doctype,
-      name: props.docname,
+      reference_doctype: props.doctype,
+      reference_name: props.docname,
     })
   }
 }

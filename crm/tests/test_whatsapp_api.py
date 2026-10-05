@@ -21,65 +21,20 @@ class TestWhatsAppAPI(FrappeTestCase):
     def setUpClass(cls):
         """Configuración inicial para todos los tests."""
         super().setUpClass()
-        
-        # Crear template de prueba con variables nombradas
-        if not frappe.db.exists("WhatsApp Templates", "test_template_named"):
-            frappe.get_doc({
-                "doctype": "WhatsApp Templates",
-                "template_name": "test_template_named",
-                "actual_name": "test_template_named",
-                "template": "Hola {{nombre}}, tu asesor es {{asesor}}. Disciplina: {{disciplina}}",
-                "for_doctype": "CRM Lead",
-                "sample_values": "a,a,a",
-                "status": "APPROVED",
-                "language": "es",
-                "language_code": "es_MX",
-                "category": "MARKETING"
-            }).insert(ignore_permissions=True)
-        
-        # Crear template de prueba sin variables
-        if not frappe.db.exists("WhatsApp Templates", "test_template_no_vars"):
-            frappe.get_doc({
-                "doctype": "WhatsApp Templates",
-                "template_name": "test_template_no_vars",
-                "actual_name": "test_template_no_vars",
-                "template": "Hola, este es un mensaje sin variables.",
-                "for_doctype": "CRM Lead",
-                "status": "APPROVED",
-                "language": "es",
-                "language_code": "es_MX",
-                "category": "MARKETING"
-            }).insert(ignore_permissions=True)
-        
-        # Crear template con variables duplicadas
-        if not frappe.db.exists("WhatsApp Templates", "test_template_duplicates"):
-            frappe.get_doc({
-                "doctype": "WhatsApp Templates",
-                "template_name": "test_template_duplicates",
-                "actual_name": "test_template_duplicates",
-                "template": "Hola {{nombre}}, {{nombre}}. Tu asesor es {{asesor}}.",
-                "for_doctype": "CRM Lead",
-                "sample_values": "a,a",
-                "status": "APPROVED",
-                "language": "es",
-                "language_code": "es_MX",
-                "category": "MARKETING"
-            }).insert(ignore_permissions=True)
 
     @classmethod
     def tearDownClass(cls):
         """Limpieza después de todos los tests."""
-        # Eliminar templates de prueba
-        for template_name in ["test_template_named", "test_template_no_vars", "test_template_duplicates"]:
-            if frappe.db.exists("WhatsApp Templates", template_name):
-                frappe.delete_doc("WhatsApp Templates", template_name, force=True)
-        
         super().tearDownClass()
 
-    def test_get_template_variables_extracts_named_variables(self):
+    @patch("crm.api.whatsapp.frappe.get_doc")
+    def test_get_template_variables_extracts_named_variables(self, get_doc):
         """Test que extrae correctamente variables nombradas del template."""
         from crm.api.whatsapp import get_template_variables
-        
+
+        get_doc.return_value = frappe._dict(
+            template="Hola {{nombre}}, tu asesor es {{asesor}}. Disciplina: {{disciplina}}"
+        )
         variables = get_template_variables("test_template_named")
         
         # Debe extraer 3 variables únicas
@@ -96,19 +51,25 @@ class TestWhatsAppAPI(FrappeTestCase):
             self.assertTrue(var["placeholder"].startswith("{{"))
             self.assertTrue(var["placeholder"].endswith("}}"))
 
-    def test_get_template_variables_empty_for_no_vars(self):
+    @patch("crm.api.whatsapp.frappe.get_doc")
+    def test_get_template_variables_empty_for_no_vars(self, get_doc):
         """Test que retorna lista vacía para template sin variables."""
         from crm.api.whatsapp import get_template_variables
-        
+
+        get_doc.return_value = frappe._dict(template="Hola, este es un mensaje sin variables.")
         variables = get_template_variables("test_template_no_vars")
         
         self.assertEqual(len(variables), 0)
         self.assertEqual(variables, [])
 
-    def test_get_template_variables_removes_duplicates(self):
+    @patch("crm.api.whatsapp.frappe.get_doc")
+    def test_get_template_variables_removes_duplicates(self, get_doc):
         """Test que elimina variables duplicadas."""
         from crm.api.whatsapp import get_template_variables
-        
+
+        get_doc.return_value = frappe._dict(
+            template="Hola {{nombre}}, {{nombre}}. Tu asesor es {{asesor}}."
+        )
         variables = get_template_variables("test_template_duplicates")
         
         # Debe extraer solo 2 variables únicas (nombre aparece 2 veces en el template)
@@ -118,121 +79,78 @@ class TestWhatsAppAPI(FrappeTestCase):
         self.assertIn("nombre", variable_names)
         self.assertIn("asesor", variable_names)
 
-    def test_get_template_variables_ignores_invalid_format(self):
+    @patch("crm.api.whatsapp.frappe.get_doc")
+    def test_get_template_variables_ignores_invalid_format(self, get_doc):
         """Test que ignora variables con formato inválido (mayúsculas, números)."""
-        # Crear template temporal con variables inválidas
-        template_name = "test_template_invalid_vars"
-        if not frappe.db.exists("WhatsApp Templates", template_name):
-            frappe.get_doc({
-                "doctype": "WhatsApp Templates",
-                "template_name": template_name,
-                "actual_name": template_name,
-                "template": "Hola {{Nombre}}, tu ID es {{id123}}, contacto: {{teléfono}}",
-                "for_doctype": "CRM Lead",
-                "sample_values": "a,a,a",
-                "status": "APPROVED",
-                "language": "es",
-                "language_code": "es_MX",
-                "category": "MARKETING"
-            }).insert(ignore_permissions=True)
-        
-        try:
-            from crm.api.whatsapp import get_template_variables
-            
-            variables = get_template_variables(template_name)
-            
-            # No debe extraer ninguna variable válida (todas tienen formato inválido)
-            self.assertEqual(len(variables), 0)
-        finally:
-            # Limpiar
-            if frappe.db.exists("WhatsApp Templates", template_name):
-                frappe.delete_doc("WhatsApp Templates", template_name, force=True)
+        from crm.api.whatsapp import get_template_variables
 
-    def test_send_whatsapp_template_with_body_param(self):
+        get_doc.return_value = frappe._dict(
+            template="Hola {{Nombre}}, tu ID es {{123id}}, contacto: {{teléfono}}"
+        )
+        variables = get_template_variables("test_template_invalid_vars")
+
+        # No debe extraer ninguna variable válida (todas tienen formato inválido)
+        self.assertEqual(len(variables), 0)
+
+    @patch("crm.api.whatsapp.frappe.new_doc")
+    @patch("crm.api.whatsapp.validate_access")
+    def test_send_whatsapp_template_with_body_param(self, validate_access, new_doc):
         """Test que envía template con variables nombradas usando body_param."""
         from crm.api.whatsapp import send_whatsapp_template
-        
-        # Crear Lead de prueba
-        lead_name = frappe.generate_hash(length=10)
-        lead = frappe.get_doc({
-            "doctype": "CRM Lead",
-            "lead_name": lead_name,
-            "first_name": "Juan",
-            "mobile_no": "521234567890",
-            "lead_owner": "maria@example.com"
-        })
-        lead.insert(ignore_permissions=True)
-        
-        try:
-            # Enviar template con variables nombradas
-            message_name = send_whatsapp_template(
-                reference_doctype="CRM Lead",
-                reference_name=lead.name,
-                template="test_template_named",
-                to="521234567890",
-                body_param={
-                    "nombre": "Juan",
-                    "asesor": "María",
-                    "disciplina": "Karate"
-                }
-            )
-            
-            # Verificar que se creó el mensaje
-            self.assertIsNotNone(message_name)
-            self.assertTrue(frappe.db.exists("WhatsApp Message", message_name))
-            
-            # Verificar que body_param se guardó correctamente
-            message = frappe.get_doc("WhatsApp Message", message_name)
-            self.assertIsNotNone(message.body_param)
-            
-            body_data = json.loads(message.body_param)
-            self.assertEqual(body_data["nombre"], "Juan")
-            self.assertEqual(body_data["asesor"], "María")
-            self.assertEqual(body_data["disciplina"], "Karate")
-            
-            # Limpiar
-            frappe.delete_doc("WhatsApp Message", message_name, force=True)
-        finally:
-            # Limpiar Lead
-            frappe.delete_doc("CRM Lead", lead.name, force=True)
 
-    def test_send_whatsapp_template_without_body_param(self):
+        validate_access.return_value = MagicMock()
+        message = MagicMock()
+        message.name = "WHATSAPP-MESSAGE-001"
+        new_doc.return_value = message
+
+        message_name = send_whatsapp_template(
+            reference_doctype="CRM Lead",
+            reference_name="LEAD-001",
+            template="test_template_named",
+            to="521234567890",
+            body_param={
+                "nombre": "Juan",
+                "asesor": "María",
+                "disciplina": "Karate"
+            }
+        )
+
+        self.assertEqual(message_name, "WHATSAPP-MESSAGE-001")
+        body_data = json.loads(message.update.call_args.args[0]["body_param"])
+        self.assertEqual(body_data["nombre"], "Juan")
+        self.assertEqual(body_data["asesor"], "María")
+        self.assertEqual(body_data["disciplina"], "Karate")
+        validate_access.assert_called_once_with("CRM Lead", "LEAD-001")
+        message.insert.assert_called_once_with(ignore_permissions=True)
+
+    @patch("crm.api.whatsapp._build_whatsapp_body_param_from_mapping", return_value=None)
+    @patch("crm.api.whatsapp.frappe.new_doc")
+    @patch("crm.api.whatsapp.validate_access")
+    def test_send_whatsapp_template_without_body_param(
+        self, validate_access, new_doc, build_body_param
+    ):
         """Test que envía template sin variables (body_param=None)."""
         from crm.api.whatsapp import send_whatsapp_template
-        
-        # Crear Lead de prueba
-        lead_name = frappe.generate_hash(length=10)
-        lead = frappe.get_doc({
-            "doctype": "CRM Lead",
-            "lead_name": lead_name,
-            "first_name": "Test",
-            "mobile_no": "521234567890"
-        })
-        lead.insert(ignore_permissions=True)
-        
-        try:
-            # Enviar template sin variables
-            message_name = send_whatsapp_template(
-                reference_doctype="CRM Lead",
-                reference_name=lead.name,
-                template="test_template_no_vars",
-                to="521234567890",
-                body_param=None
-            )
-            
-            # Verificar que se creó el mensaje
-            self.assertIsNotNone(message_name)
-            self.assertTrue(frappe.db.exists("WhatsApp Message", message_name))
-            
-            # Verificar que body_param es None
-            message = frappe.get_doc("WhatsApp Message", message_name)
-            self.assertIsNone(message.body_param)
-            
-            # Limpiar
-            frappe.delete_doc("WhatsApp Message", message_name, force=True)
-        finally:
-            # Limpiar Lead
-            frappe.delete_doc("CRM Lead", lead.name, force=True)
+
+        reference_doc = MagicMock()
+        validate_access.return_value = reference_doc
+        message = MagicMock()
+        message.name = "WHATSAPP-MESSAGE-001"
+        new_doc.return_value = message
+
+        message_name = send_whatsapp_template(
+            reference_doctype="CRM Lead",
+            reference_name="LEAD-001",
+            template="test_template_no_vars",
+            to="521234567890",
+            body_param=None
+        )
+
+        self.assertEqual(message_name, "WHATSAPP-MESSAGE-001")
+        self.assertIsNone(message.update.call_args.args[0]["body_param"])
+        validate_access.assert_called_once_with("CRM Lead", "LEAD-001")
+        build_body_param.assert_called_once_with(reference_doc, "test_template_no_vars")
+        message.insert.assert_called_once_with(ignore_permissions=True)
 
     def test_send_whatsapp_template_validates_access(self):
         """Test que valida permisos de acceso al documento de referencia."""
@@ -247,6 +165,67 @@ class TestWhatsAppAPI(FrappeTestCase):
                 to="521234567890",
                 body_param={"nombre": "Test"}
             )
+
+    def test_mapping_fieldname_rejects_malformed_field_values(self):
+        """Test que ignora mappings con field no-string o vacío."""
+        from crm.api.whatsapp import _get_mapping_fieldname
+
+        self.assertIsNone(_get_mapping_fieldname({"source": "field", "field": ["first_name"]}))
+        self.assertIsNone(_get_mapping_fieldname({"source": "field", "field": 123}))
+        self.assertIsNone(_get_mapping_fieldname({"source": "field", "field": ""}))
+        self.assertIsNone(_get_mapping_fieldname(""))
+        self.assertEqual(_get_mapping_fieldname({"source": "field", "field": "first_name"}), "first_name")
+        self.assertEqual(_get_mapping_fieldname("first_name"), "first_name")
+
+    @patch("crm.api.whatsapp.frappe.new_doc")
+    @patch("crm.api.whatsapp.frappe.get_doc")
+    @patch("crm.api.whatsapp._get_whatsapp_visible_field_snapshots")
+    @patch("crm.api.whatsapp.validate_access")
+    def test_send_whatsapp_template_builds_body_param_from_saved_visible_field_mapping(
+        self, validate_access, visible_fields, get_doc, new_doc
+    ):
+        """Test que el envío resuelve solo mappings guardados visibles."""
+        from crm.api.whatsapp import send_whatsapp_template
+
+        reference_doc = MagicMock()
+        validate_access.return_value = reference_doc
+        visible_fields.return_value = [
+            {"fieldname": "__assigned_advisor_first_name", "label": "Assigned Advisor First Name", "value": "María"},
+            {"fieldname": "first_name", "label": "First Name", "value": "Juan"},
+        ]
+
+        template = MagicMock()
+        template.named_field_mapping = json.dumps(
+            {
+                "asesor": {
+                    "source": "field",
+                    "field": "__assigned_advisor_first_name",
+                },
+                "nombre": "first_name",
+                "private": "private_notes",
+                "manual": {"source": "manual"},
+            }
+        )
+        get_doc.return_value = template
+
+        message = MagicMock()
+        message.name = "WHATSAPP-MESSAGE-001"
+        new_doc.return_value = message
+
+        message_name = send_whatsapp_template(
+            reference_doctype="CRM Lead",
+            reference_name="LEAD-001",
+            template="test_template_named",
+            to="521234567890",
+            body_param=None,
+        )
+
+        self.assertEqual(message_name, "WHATSAPP-MESSAGE-001")
+        body_param = json.loads(message.update.call_args.args[0]["body_param"])
+        self.assertEqual(body_param, {"asesor": "María", "nombre": "Juan"})
+        validate_access.assert_called_once_with("CRM Lead", "LEAD-001")
+        get_doc.assert_called_once_with("WhatsApp Templates", "test_template_named")
+        visible_fields.assert_called_once_with(reference_doc)
 
 
 class TestWhatsAppPreviewFields(FrappeTestCase):
@@ -275,6 +254,8 @@ class TestWhatsAppPreviewFields(FrappeTestCase):
     def make_meta(self, fields, permitted_fieldnames):
         meta = frappe._dict(fields=fields)
         meta.get_permitted_fieldnames = MagicMock(return_value=permitted_fieldnames)
+        fields_by_name = {field.fieldname: field for field in fields}
+        meta.get_field = MagicMock(side_effect=fields_by_name.get)
         return meta
 
     @patch("crm.api.whatsapp.frappe.get_meta")
@@ -377,6 +358,73 @@ class TestWhatsAppPreviewFields(FrappeTestCase):
 
         self.assertEqual(str(raised.exception), "Not permitted to preview fields for this record.")
         get_doc.assert_not_called()
+
+    @patch("crm.api.whatsapp.frappe.db.get_value")
+    @patch("crm.api.whatsapp.frappe.get_meta")
+    @patch("crm.api.whatsapp.frappe.get_doc")
+    @patch("crm.api.whatsapp.frappe.get_roles", return_value=["Sales User"])
+    def test_includes_derived_assigned_advisor_fields_when_owner_field_is_permitted(
+        self, _get_roles, get_doc, get_meta, get_value
+    ):
+        from crm.api.whatsapp import get_whatsapp_preview_fields
+
+        doc = MagicMock()
+        doc.doctype = "CRM Lead"
+        doc.has_permission.return_value = True
+        doc.get.side_effect = {"lead_owner": "maria@example.com"}.get
+        get_doc.return_value = doc
+        get_meta.return_value = self.make_meta(
+            [self.make_field("lead_owner", fieldtype="Link", label="Lead Owner")],
+            ["lead_owner"],
+        )
+        get_value.return_value = frappe._dict(
+            full_name="María López", first_name="María", last_name="López"
+        )
+
+        result = get_whatsapp_preview_fields("CRM Lead", "LEAD-001")
+
+        self.assertEqual(
+            result,
+            {
+                "fields": [
+                    {"fieldname": "lead_owner", "label": "Lead Owner", "value": "maria@example.com"},
+                    {
+                        "fieldname": "__assigned_advisor_full_name",
+                        "label": "Assigned Advisor Full Name",
+                        "value": "María López",
+                    },
+                    {
+                        "fieldname": "__assigned_advisor_first_name",
+                        "label": "Assigned Advisor First Name",
+                        "value": "María",
+                    },
+                ]
+            },
+        )
+
+    @patch("crm.api.whatsapp.frappe.db.get_value")
+    @patch("crm.api.whatsapp.frappe.get_meta")
+    @patch("crm.api.whatsapp.frappe.get_doc")
+    @patch("crm.api.whatsapp.frappe.get_roles", return_value=["Sales User"])
+    def test_omits_derived_assigned_advisor_fields_when_owner_field_is_masked(
+        self, _get_roles, get_doc, get_meta, get_value
+    ):
+        from crm.api.whatsapp import get_whatsapp_preview_fields
+
+        doc = MagicMock()
+        doc.doctype = "CRM Lead"
+        doc.has_permission.return_value = True
+        doc.get.side_effect = {"lead_owner": "maria@example.com"}.get
+        get_doc.return_value = doc
+        get_meta.return_value = self.make_meta(
+            [self.make_field("lead_owner", fieldtype="Link", label="Lead Owner", mask="X")],
+            ["lead_owner"],
+        )
+
+        result = get_whatsapp_preview_fields("CRM Lead", "LEAD-001")
+
+        self.assertEqual(result, {"fields": []})
+        get_value.assert_not_called()
 
     @patch("crm.api.whatsapp.frappe.get_meta")
     @patch("crm.api.whatsapp.frappe.get_doc")
