@@ -426,6 +426,10 @@ const { $dialog, $socket, makeCall } = globalStore()
 const { statusOptions, getDealStatus } = statusesStore()
 const { doctypeMeta } = getMeta('CRM Deal')
 
+const pipelineStageNames = ref([])
+const pipelineStagesLoading = ref(false)
+let pipelineStagesRequest = 0
+
 const { updateOnboardingStep, isOnboardingStepsCompleted } =
   useOnboarding('frappecrm')
 
@@ -564,8 +568,63 @@ const statuses = computed(() => {
   let customStatuses = document.statuses?.length
     ? document.statuses
     : document._statuses || []
-  return statusOptions('deal', customStatuses, triggerStatusChange)
+
+  if (!doc.value.comercial_pipeline) {
+    return statusOptions('deal', customStatuses, triggerStatusChange)
+  }
+
+  if (pipelineStagesLoading.value || !pipelineStageNames.value.length) {
+    return []
+  }
+
+  const allowedStatuses = customStatuses.length
+    ? customStatuses.filter((status) =>
+        pipelineStageNames.value.includes(status),
+      )
+    : pipelineStageNames.value
+
+  return statusOptions('deal', allowedStatuses, triggerStatusChange)
 })
+
+watch(
+  () => doc.value.comercial_pipeline,
+  (pipeline) => loadPipelineStages(pipeline),
+  { immediate: true },
+)
+
+async function loadPipelineStages(pipeline) {
+  const request = ++pipelineStagesRequest
+  pipelineStageNames.value = []
+
+  if (!pipeline) {
+    pipelineStagesLoading.value = false
+    return
+  }
+
+  pipelineStagesLoading.value = true
+  try {
+    const stages = await call('comercial.api.pipeline.get_pipeline_stages', {
+      pipeline_type: pipeline,
+    })
+
+    if (request !== pipelineStagesRequest) return
+
+    pipelineStageNames.value = (stages || [])
+      .map((stage) => stage.stage_name)
+      .filter(Boolean)
+  } catch (err) {
+    if (request !== pipelineStagesRequest) return
+    toast.error(
+      __('Error loading pipeline statuses: {0}', [
+        err.messages?.[0] || err.message,
+      ]),
+    )
+  } finally {
+    if (request === pipelineStagesRequest) {
+      pipelineStagesLoading.value = false
+    }
+  }
+}
 
 usePageMeta(() => {
   return {
