@@ -116,6 +116,7 @@ const { isManager } = usersStore()
 const { user } = sessionStore()
 const { updateOnboardingStep } = useOnboarding('frappecrm')
 const { doctypeMeta: leadMeta } = getMeta('CRM Lead')
+const { doctypeMeta: dealMeta } = getMeta('CRM Deal')
 
 const existingContactChecked = ref(false)
 const existingOrganizationChecked = ref(false)
@@ -138,6 +139,16 @@ async function convertToDeal() {
 
   if (existingOrganizationChecked.value && !existingOrganization.value) {
     error.value = __('Please select an existing organization')
+    return
+  }
+
+  if (!deal.doc.comercial_pipeline) {
+    error.value = __('Please select a pipeline')
+    return
+  }
+
+  if (!deal.doc.status) {
+    error.value = __('Please select a status')
     return
   }
 
@@ -189,7 +200,18 @@ async function convertToDeal() {
   }
 }
 
-const dealStatuses = computed(() => statusOptions('deal'))
+const pipelineStageNames = ref([])
+const pipelineStagesLoading = ref(false)
+let pipelineStagesRequest = 0
+
+const dealFields = computed(() => dealMeta.value?.fields || [])
+const pipelineField = computed(() =>
+  dealFields.value.find((field) => field.fieldname === 'comercial_pipeline'),
+)
+const dealStatuses = computed(() => {
+  if (!deal.doc.comercial_pipeline || !pipelineStageNames.value.length) return []
+  return statusOptions('deal', pipelineStageNames.value)
+})
 
 const dealTabs = createResource({
   url: 'crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_fields_layout',
@@ -197,27 +219,12 @@ const dealTabs = createResource({
   params: { doctype: 'CRM Deal', type: 'Required Fields' },
   auto: true,
   transform: (_tabs) => {
-    let hasFields = false
-    _tabs?.forEach((tab) => {
-      tab.sections?.forEach((section) => {
-        section.columns?.forEach((column) => {
-          column.fields?.forEach((field) => {
-            hasFields = true
-            if (field.fieldname == 'status') {
-              field.fieldtype = 'Select'
-              field.options = dealStatuses.value
-              field.prefix = getDealStatus(deal.doc.status).color
-            }
-          })
-        })
-      })
-    })
-    return hasFields ? _tabs : []
+    return applyDealFieldRules(_tabs)
   },
 })
 
 const leadDealFieldMap = { deal_owner: 'lead_owner' }
-const skipPrefillFields = ['organization', 'status']
+const skipPrefillFields = ['organization', 'status', 'comercial_pipeline']
 const leadFields = computed(() => leadMeta.value?.fields || [])
 
 watch(
@@ -227,6 +234,130 @@ watch(
 )
 
 watch(leadFields, () => prefillFields(dealTabs.data))
+watch(dealFields, () => applyDealFieldRules(dealTabs.data))
+watch(dealStatuses, () => applyDealFieldRules(dealTabs.data))
+watch(
+  () => deal.doc.comercial_pipeline,
+  (pipeline) => loadPipelineStages(pipeline),
+)
+
+async function loadPipelineStages(pipeline) {
+  const request = ++pipelineStagesRequest
+  pipelineStageNames.value = []
+  deal.doc.status = ''
+  applyDealFieldRules(dealTabs.data)
+
+  if (!pipeline) return
+
+  pipelineStagesLoading.value = true
+  applyDealFieldRules(dealTabs.data)
+  try {
+    const stages = await call('comercial.api.pipeline.get_pipeline_stages', {
+      pipeline_type: pipeline,
+    })
+
+    if (request !== pipelineStagesRequest) return
+
+    pipelineStageNames.value = (stages || [])
+      .map((stage) => stage.stage_name)
+      .filter(Boolean)
+  } catch (err) {
+    if (request !== pipelineStagesRequest) return
+    error.value = __('Error loading pipeline stages: {0}', [
+      err.messages?.[0] || err.message,
+    ])
+  } finally {
+    if (request === pipelineStagesRequest) {
+      pipelineStagesLoading.value = false
+      applyDealFieldRules(dealTabs.data)
+    }
+  }
+}
+
+function applyDealFieldRules(tabs) {
+  let hasFields = false
+  ensurePipelineField(tabs)
+
+  tabs?.forEach((tab) => {
+    tab.sections?.forEach((section) => {
+      section.columns?.forEach((column) => {
+        column.fields?.forEach((field) => {
+          hasFields = true
+          if (field.fieldname === 'comercial_pipeline') {
+            field.fieldtype = 'Select'
+            field.label = field.label || __('Pipeline')
+            field.reqd = 1
+            field.options = pipelineField.value?.options || field.options || ''
+            field.description = __('Select a pipeline before choosing a status')
+          }
+
+          if (field.fieldname === 'status') {
+            field.fieldtype = 'Select'
+            field.options = dealStatuses.value
+            field.prefix = deal.doc.status
+              ? getDealStatus(deal.doc.status)?.color
+              : ''
+            field.description = getStatusFieldDescription()
+          }
+        })
+      })
+    })
+  })
+
+  return hasFields ? tabs : []
+}
+
+function ensurePipelineField(tabs) {
+  if (!tabs?.length || hasField(tabs, 'comercial_pipeline')) return
+
+  for (const tab of tabs) {
+    for (const section of tab.sections || []) {
+      for (const column of section.columns || []) {
+        const statusIndex = column.fields?.findIndex(
+          (field) => field.fieldname === 'status',
+        )
+        if (statusIndex >= 0) {
+          column.fields.splice(statusIndex, 0, createPipelineField())
+          return
+        }
+      }
+    }
+  }
+}
+
+function createPipelineField() {
+  return {
+    ...(pipelineField.value || {}),
+    fieldname: 'comercial_pipeline',
+    fieldtype: 'Select',
+    label: pipelineField.value?.label || __('Pipeline'),
+    options: pipelineField.value?.options || '',
+    reqd: 1,
+  }
+}
+
+function hasField(tabs, fieldname) {
+  return tabs?.some((tab) =>
+    tab.sections?.some((section) =>
+      section.columns?.some((column) =>
+        column.fields?.some((field) => field.fieldname === fieldname),
+      ),
+    ),
+  )
+}
+
+function getStatusFieldDescription() {
+  if (!deal.doc.comercial_pipeline) {
+    return __('Select a pipeline to load its statuses')
+  }
+  if (pipelineStagesLoading.value) {
+    return __('Loading statuses for the selected pipeline')
+  }
+  if (!dealStatuses.value.length) {
+    return __('No statuses found for the selected pipeline')
+  }
+  return __('Only statuses from the selected pipeline are available')
+}
 
 function resetDealDoc(tabs) {
   deal.doc = { __newDocument: true, doctype: 'CRM Deal' }
