@@ -80,17 +80,45 @@ def validate(doc, method):
 
 
 def on_update(doc, method):
-	frappe.publish_realtime(
-		event="whatsapp_message",
-		message={
-			"reference_doctype": doc.reference_doctype,
-			"reference_name": doc.reference_name,
-		},
-		doctype=doc.reference_doctype,
-		docname=doc.reference_name,
-	)
+	for reference_doctype, reference_name in _get_whatsapp_realtime_targets(doc):
+		frappe.publish_realtime(
+			event="whatsapp_message",
+			message={
+				"reference_doctype": reference_doctype,
+				"reference_name": reference_name,
+			},
+			doctype=reference_doctype,
+			docname=reference_name,
+		)
 
 	notify_agent(doc)
+
+
+def _get_whatsapp_realtime_targets(doc):
+	"""Return CRM document rooms whose WhatsApp timeline should reload for doc."""
+	targets = []
+	seen = set()
+
+	def add_target(reference_doctype, reference_name):
+		if not reference_doctype or not reference_name:
+			return
+		key = (reference_doctype, reference_name)
+		if key in seen:
+			return
+		seen.add(key)
+		targets.append(key)
+
+	add_target(doc.reference_doctype, doc.reference_name)
+
+	if doc.reference_doctype == "CRM Lead" and doc.reference_name:
+		for deal_name in frappe.get_all(
+			"CRM Deal",
+			filters={"lead": doc.reference_name},
+			pluck="name",
+		):
+			add_target("CRM Deal", deal_name)
+
+	return targets
 
 
 def notify_agent(doc):

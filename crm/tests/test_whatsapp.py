@@ -209,7 +209,10 @@ class TestOnUpdateRealtime(FrappeTestCase):
 		doc.reference_doctype = "CRM Lead"
 		doc.reference_name = "CRM-LEAD-001"
 
-		with patch("crm.api.whatsapp.frappe.publish_realtime") as mock_publish:
+		with (
+			patch("crm.api.whatsapp.frappe.publish_realtime") as mock_publish,
+			patch("crm.api.whatsapp.frappe.get_all", return_value=[]),
+		):
 			on_update(doc, None)
 
 			mock_publish.assert_called_once_with(
@@ -221,3 +224,75 @@ class TestOnUpdateRealtime(FrappeTestCase):
 				doctype="CRM Lead",
 				docname="CRM-LEAD-001",
 			)
+
+	def test_on_update_publishes_direct_deal_room(self):
+		"""A Deal-linked WhatsApp message still publishes to that Deal room."""
+		doc = MagicMock()
+		doc.reference_doctype = "CRM Deal"
+		doc.reference_name = "CRM-DEAL-001"
+
+		with (
+			patch("crm.api.whatsapp.frappe.publish_realtime") as mock_publish,
+			patch("crm.api.whatsapp.frappe.get_all") as mock_get_all,
+		):
+			on_update(doc, None)
+
+		mock_get_all.assert_not_called()
+		mock_publish.assert_called_once_with(
+			event="whatsapp_message",
+			message={
+				"reference_doctype": "CRM Deal",
+				"reference_name": "CRM-DEAL-001",
+			},
+			doctype="CRM Deal",
+			docname="CRM-DEAL-001",
+		)
+
+	def test_on_update_publishes_linked_deal_rooms_for_lead_message(self):
+		"""Lead-linked WhatsApp messages notify open Deal timelines that include Lead messages."""
+		doc = MagicMock()
+		doc.reference_doctype = "CRM Lead"
+		doc.reference_name = "CRM-LEAD-001"
+
+		with (
+			patch("crm.api.whatsapp.frappe.publish_realtime") as mock_publish,
+			patch(
+				"crm.api.whatsapp.frappe.get_all",
+				return_value=["CRM-DEAL-001", "CRM-DEAL-002"],
+			) as mock_get_all,
+		):
+			on_update(doc, None)
+
+		mock_get_all.assert_called_once_with(
+			"CRM Deal",
+			filters={"lead": "CRM-LEAD-001"},
+			pluck="name",
+		)
+		self.assertEqual(mock_publish.call_count, 3)
+		mock_publish.assert_any_call(
+			event="whatsapp_message",
+			message={
+				"reference_doctype": "CRM Lead",
+				"reference_name": "CRM-LEAD-001",
+			},
+			doctype="CRM Lead",
+			docname="CRM-LEAD-001",
+		)
+		mock_publish.assert_any_call(
+			event="whatsapp_message",
+			message={
+				"reference_doctype": "CRM Deal",
+				"reference_name": "CRM-DEAL-001",
+			},
+			doctype="CRM Deal",
+			docname="CRM-DEAL-001",
+		)
+		mock_publish.assert_any_call(
+			event="whatsapp_message",
+			message={
+				"reference_doctype": "CRM Deal",
+				"reference_name": "CRM-DEAL-002",
+			},
+			doctype="CRM Deal",
+			docname="CRM-DEAL-002",
+		)
