@@ -192,6 +192,7 @@ import OrganizationsIcon from '@/components/Icons/OrganizationsIcon.vue'
 import NoteIcon from '@/components/Icons/NoteIcon.vue'
 import TaskIcon from '@/components/Icons/TaskIcon.vue'
 import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
+import WhatsAppIcon from '@/components/Icons/WhatsAppIcon.vue'
 import CollapseSidebar from '@/components/Icons/CollapseSidebar.vue'
 import NotificationsIcon from '@/components/Icons/NotificationsIcon.vue'
 import HelpIcon from '@/components/Icons/HelpIcon.vue'
@@ -211,6 +212,7 @@ import {
 } from '@/composables/settings'
 import { showChangePasswordModal } from '@/composables/modals'
 import { useBroadcast } from '@/composables/useBroadcast.js'
+import { whatsappEnabled } from '@/composables/whatsapp'
 import { call, Sidebar, SidebarItem, SidebarLabel, Tooltip } from 'frappe-ui'
 import {
   SignupBanner,
@@ -291,6 +293,12 @@ const links = [
     label: 'Call Logs',
     icon: PhoneIcon,
     to: 'Call Logs',
+  },
+  {
+    label: 'Whatsapp',
+    icon: WhatsAppIcon,
+    to: 'Whatsapp',
+    condition: () => whatsappEnabled.value,
   },
   {
     label: 'Deal Workspace',

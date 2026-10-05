@@ -121,6 +121,92 @@ def _get_whatsapp_realtime_targets(doc):
 	return targets
 
 
+def _truncate_whatsapp_preview(message, length=120):
+	message = (message or "").strip()
+	if len(message) <= length:
+		return message
+	return message[: max(length - 1, 0)].rstrip() + "…"
+
+
+def _get_whatsapp_reference_title(reference_doctype, reference_name):
+	if reference_doctype == "CRM Lead":
+		lead = frappe.db.get_value(
+			"CRM Lead",
+			reference_name,
+			["lead_name", "first_name", "last_name", "organization"],
+			as_dict=True,
+		)
+		if not lead:
+			return reference_name
+		return (
+			lead.get("lead_name")
+			or " ".join(
+				part for part in [lead.get("first_name"), lead.get("last_name")] if part
+			).strip()
+			or lead.get("organization")
+			or reference_name
+		)
+
+	if reference_doctype == "CRM Deal":
+		deal = frappe.db.get_value(
+			"CRM Deal",
+			reference_name,
+			["deal_name", "organization", "lead_name"],
+			as_dict=True,
+		)
+		if not deal:
+			return reference_name
+		return deal.get("deal_name") or deal.get("organization") or deal.get("lead_name") or reference_name
+
+	return reference_name
+
+
+def _get_whatsapp_preview_sender(message):
+	if not message.get("from"):
+		return _("You")
+	return get_from_name(message) or message.get("from") or ""
+
+
+def _get_whatsapp_message_preview(message):
+	body = message.get("message") or message.get("template") or message.get("attach") or ""
+	return "{0}: {1}".format(
+		_get_whatsapp_preview_sender(message),
+		_truncate_whatsapp_preview(body),
+	)
+
+
+def _get_whatsapp_chat_route(reference_doctype, reference_name):
+	if reference_doctype == "CRM Deal":
+		return {"name": "Deal", "params": {"dealId": reference_name}, "hash": "#whatsapp"}
+	return {"name": "Lead", "params": {"leadId": reference_name}, "hash": "#whatsapp"}
+
+
+def _upsert_whatsapp_chat(chats, reference_doctype, reference_name, message):
+	if reference_doctype not in WHATSAPP_PREVIEW_DOCTYPES or not reference_name:
+		return
+
+	try:
+		validate_access(reference_doctype, reference_name)
+	except Exception:
+		return
+
+	key = (reference_doctype, reference_name)
+	current = chats.get(key)
+	message_creation = message.get("creation")
+	if current and current.get("last_message_on") >= message_creation:
+		return
+
+	chats[key] = {
+		"name": "{0}:{1}".format(reference_doctype, reference_name),
+		"reference_doctype": reference_doctype,
+		"reference_name": reference_name,
+		"title": _get_whatsapp_reference_title(reference_doctype, reference_name),
+		"preview": _get_whatsapp_message_preview(message),
+		"last_message_on": message_creation,
+		"route": _get_whatsapp_chat_route(reference_doctype, reference_name),
+	}
+
+
 def notify_agent(doc):
 	if doc.type == "Incoming":
 		if not doc.reference_doctype or not doc.reference_name:
@@ -377,6 +463,107 @@ def get_whatsapp_messages(reference_doctype: str, reference_name: str):
 			reply_message["reply_to_from"] = from_name
 
 	return [message for message in messages if message["content_type"] != "reaction"]
+
+
+@frappe.whitelist()
+def get_whatsapp_chats(search: str | None = None, order_by: str = "last_message_on desc", start=0, page_length=20):
+	validate_access()
+	if "twilio_integration" in frappe.get_installed_apps():
+		return {"data": [], "row_count": 0, "total_count": 0, "page_length_count": 0}
+	if not frappe.db.exists("DocType", "WhatsApp Message"):
+		return {"data": [], "row_count": 0, "total_count": 0, "page_length_count": 0}
+
+	try:
+		start = max(int(start or 0), 0)
+	except (TypeError, ValueError):
+		start = 0
+	try:
+		page_length = min(max(int(page_length or 20), 1), 100)
+	except (TypeError, ValueError):
+		page_length = 20
+
+	message_reference_filters = [
+		["reference_doctype", "in", list(WHATSAPP_PREVIEW_DOCTYPES)],
+		["reference_name", "is", "set"],
+		["content_type", "!=", "reaction"],
+	]
+	references = frappe.get_all(
+		"WhatsApp Message",
+		filters=message_reference_filters,
+		fields=["reference_doctype", "reference_name", "max(creation) as last_message_on"],
+		group_by="reference_doctype, reference_name",
+		order_by="last_message_on desc",
+	)
+
+	chats = {}
+	for reference in references:
+		latest_messages = frappe.get_all(
+			"WhatsApp Message",
+			filters=message_reference_filters
+			+ [
+				["reference_doctype", "=", reference.get("reference_doctype")],
+				["reference_name", "=", reference.get("reference_name")],
+			],
+			fields=[
+				"name",
+				"type",
+				"from",
+				"to",
+				"content_type",
+				"message_type",
+				"attach",
+				"template",
+				"message",
+				"creation",
+				"reference_doctype",
+				"reference_name",
+			],
+			order_by="creation desc, name desc",
+			limit_page_length=1,
+		)
+		if not latest_messages:
+			continue
+
+		message = latest_messages[0]
+		reference_doctype = message.get("reference_doctype")
+		reference_name = message.get("reference_name")
+		_upsert_whatsapp_chat(chats, reference_doctype, reference_name, message)
+
+		if reference_doctype == "CRM Lead":
+			for deal_name in frappe.get_all(
+				"CRM Deal",
+				filters={"lead": reference_name},
+				pluck="name",
+			):
+				_upsert_whatsapp_chat(chats, "CRM Deal", deal_name, message)
+
+	rows = list(chats.values())
+	if search:
+		needle = str(search).strip().lower()
+		if needle:
+			rows = [
+				row
+				for row in rows
+				if needle in (row.get("title") or "").lower()
+				or needle in (row.get("preview") or "").lower()
+				or needle in (row.get("reference_name") or "").lower()
+			]
+
+	order_by = (order_by or "last_message_on desc").lower().strip()
+	if order_by not in {"last_message_on desc", "last_message_on asc", "title asc", "title desc"}:
+		order_by = "last_message_on desc"
+	fieldname, direction = order_by.split()
+	reverse = direction == "desc"
+	rows.sort(key=lambda row: row.get(fieldname) or "", reverse=reverse)
+
+	total_count = len(rows)
+	page = rows[start : start + page_length]
+	return {
+		"data": page,
+		"row_count": len(page),
+		"total_count": total_count,
+		"page_length_count": start + len(page),
+	}
 
 
 @frappe.whitelist()
