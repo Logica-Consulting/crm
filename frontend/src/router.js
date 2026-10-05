@@ -110,6 +110,11 @@ const routes = [
     component: () => import('@/pages/CallLogs.vue'),
   },
   {
+    path: '/whatsapp',
+    name: 'Whatsapp',
+    component: () => import('@/pages/WhatsApp.vue'),
+  },
+  {
     path: '/data-import',
     name: 'DataImportList',
     component: () => import('@/pages/DataImport.vue'),
