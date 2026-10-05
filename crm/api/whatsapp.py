@@ -490,9 +490,12 @@ def get_whatsapp_chats(search: str | None = None, order_by: str = "last_message_
 	references = frappe.get_all(
 		"WhatsApp Message",
 		filters=message_reference_filters,
-		fields=["reference_doctype", "reference_name", "max(creation) as last_message_on"],
+		fields=[
+			"reference_doctype",
+			"reference_name",
+			{"MAX": "creation", "as": "last_message_on"},
+		],
 		group_by="reference_doctype, reference_name",
-		order_by="last_message_on desc",
 	)
 
 	chats = {}
