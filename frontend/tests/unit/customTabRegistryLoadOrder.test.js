@@ -60,7 +60,11 @@ describe('customTabRegistry load-order safety', () => {
   it('creates and exposes a fresh registry on the normal path', async () => {
     const registry = await import('@/utils/customTabRegistry')
 
-    registry.registerDealTab({ name: 'Documents', label: 'Documents', order: 10 })
+    registry.registerDealTab({
+      name: 'Documents',
+      label: 'Documents',
+      order: 10,
+    })
     expect(registry.getRegisteredDealTabs().map((t) => t.name)).toEqual([
       'Documents',
     ])

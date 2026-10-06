@@ -14,8 +14,6 @@
  */
 export function shouldInterceptPerdido(doctype, columnField, toValue) {
   return (
-    doctype === 'CRM Deal' &&
-    columnField === 'status' &&
-    toValue === 'Perdido'
+    doctype === 'CRM Deal' && columnField === 'status' && toValue === 'Perdido'
   )
 }

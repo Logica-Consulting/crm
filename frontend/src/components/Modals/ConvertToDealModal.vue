@@ -209,7 +209,8 @@ const pipelineField = computed(() =>
   dealFields.value.find((field) => field.fieldname === 'comercial_pipeline'),
 )
 const dealStatuses = computed(() => {
-  if (!deal.doc.comercial_pipeline || !pipelineStageNames.value.length) return []
+  if (!deal.doc.comercial_pipeline || !pipelineStageNames.value.length)
+    return []
   return statusOptions('deal', pipelineStageNames.value)
 })
 

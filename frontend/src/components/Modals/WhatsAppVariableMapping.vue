@@ -7,7 +7,9 @@
     <template #default>
       <div v-if="loading" class="flex items-center justify-center py-8">
         <LoadingIndicator class="h-6 w-6" />
-        <span class="ml-2 text-ink-gray-5">{{ __('Loading variables...') }}</span>
+        <span class="ml-2 text-ink-gray-5">{{
+          __('Loading variables...')
+        }}</span>
       </div>
 
       <div v-else-if="variables.length === 0" class="py-4">
@@ -34,10 +36,23 @@
           </div>
         </div>
 
-        <div v-if="hasExistingMapping" class="mb-3 rounded-lg border border-green-200 bg-green-50 p-2">
+        <div
+          v-if="hasExistingMapping"
+          class="mb-3 rounded-lg border border-green-200 bg-green-50 p-2"
+        >
           <div class="flex items-center gap-2 text-sm text-green-700">
-            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+            <svg
+              class="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M5 13l4 4L19 7"
+              ></path>
             </svg>
             {{ __('Using saved field mapping') }}
           </div>
@@ -228,8 +243,10 @@ const valueSourceOptions = computed(() => [
 ])
 
 const hasExistingMapping = computed(() => {
-  return Object.keys(existingMapping.value).length > 0 &&
+  return (
+    Object.keys(existingMapping.value).length > 0 &&
     variables.value.some((v) => existingMapping.value[v.name])
+  )
 })
 
 function getSavedVariableConfig(varName) {
@@ -316,7 +333,8 @@ function sendWithVariables() {
   })
 
   // Save mapping if it changed
-  const mappingChanged = JSON.stringify(newMapping) !== JSON.stringify(existingMapping.value)
+  const mappingChanged =
+    JSON.stringify(newMapping) !== JSON.stringify(existingMapping.value)
   if (mappingChanged) {
     saveMappingResource.fetch({
       template_name: props.templateName,

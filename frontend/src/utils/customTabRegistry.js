@@ -49,7 +49,7 @@ function createRegistry() {
 
   function getRegisteredDealTabs() {
     return Array.from(registry.values()).sort(
-      (a, b) => (a.order ?? 99) - (b.order ?? 99)
+      (a, b) => (a.order ?? 99) - (b.order ?? 99),
     )
   }
 
