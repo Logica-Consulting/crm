@@ -33,7 +33,7 @@ export function shouldInterceptReversal(
   fromStatus,
   toStatus,
   fromType,
-  toType
+  toType,
 ) {
   return !!(
     doctype === 'CRM Deal' &&

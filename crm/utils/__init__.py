@@ -77,7 +77,7 @@ def _normalize_phone_digits(phone: str) -> str:
 
 def _remove_trunk_prefix(digits: str) -> str:
 	"""Remove known trunk prefixes after country code.
-	
+
 	Handles:
 	  - Mexico: 52 + 1 + number → 52 + number
 	  - Argentina: 54 + 9 + number → 54 + number

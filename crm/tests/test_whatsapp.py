@@ -142,28 +142,34 @@ class TestGetContactWithTrunkPrefix(FrappeTestCase):
 	def setUp(self):
 		"""Create test contacts with different phone number formats."""
 		# Contact with MX number without trunk prefix
-		self.contact_no_trunk = frappe.get_doc({
-			"doctype": "Contact",
-			"first_name": "Test",
-			"last_name": "NoTrunk",
-			"phone_nos": [{"phone": "526691252211", "is_primary_phone": 1}],
-		}).insert(ignore_permissions=True)
+		self.contact_no_trunk = frappe.get_doc(
+			{
+				"doctype": "Contact",
+				"first_name": "Test",
+				"last_name": "NoTrunk",
+				"phone_nos": [{"phone": "526691252211", "is_primary_phone": 1}],
+			}
+		).insert(ignore_permissions=True)
 
 		# Contact with MX number with trunk prefix
-		self.contact_with_trunk = frappe.get_doc({
-			"doctype": "Contact",
-			"first_name": "Test",
-			"last_name": "WithTrunk",
-			"phone_nos": [{"phone": "5216691252212", "is_primary_phone": 1}],
-		}).insert(ignore_permissions=True)
+		self.contact_with_trunk = frappe.get_doc(
+			{
+				"doctype": "Contact",
+				"first_name": "Test",
+				"last_name": "WithTrunk",
+				"phone_nos": [{"phone": "5216691252212", "is_primary_phone": 1}],
+			}
+		).insert(ignore_permissions=True)
 
 		# Contact with number without country code
-		self.contact_no_country = frappe.get_doc({
-			"doctype": "Contact",
-			"first_name": "Test",
-			"last_name": "NoCountry",
-			"phone_nos": [{"phone": "6691252213", "is_primary_phone": 1}],
-		}).insert(ignore_permissions=True)
+		self.contact_no_country = frappe.get_doc(
+			{
+				"doctype": "Contact",
+				"first_name": "Test",
+				"last_name": "NoCountry",
+				"phone_nos": [{"phone": "6691252213", "is_primary_phone": 1}],
+			}
+		).insert(ignore_permissions=True)
 
 	def tearDown(self):
 		"""Clean up test contacts."""
@@ -175,6 +181,7 @@ class TestGetContactWithTrunkPrefix(FrappeTestCase):
 	def test_find_contact_without_trunk_when_incoming_has_trunk(self):
 		"""Contact stored without trunk '1' is found when webhook has trunk"""
 		from crm.integrations.api import get_contact
+
 		# Webhook sends: 5216691252211 (with trunk)
 		# Contact stored: 526691252211 (without trunk)
 		result = get_contact("5216691252211", "MX")
@@ -184,6 +191,7 @@ class TestGetContactWithTrunkPrefix(FrappeTestCase):
 	def test_find_contact_with_trunk_when_incoming_without_trunk(self):
 		"""Contact stored with trunk '1' is found when webhook has no trunk"""
 		from crm.integrations.api import get_contact
+
 		# Webhook sends: 526691252212 (without trunk)
 		# Contact stored: 5216691252212 (with trunk)
 		result = get_contact("526691252212", "MX")
@@ -193,6 +201,7 @@ class TestGetContactWithTrunkPrefix(FrappeTestCase):
 	def test_find_contact_without_country_code(self):
 		"""Contact stored without country code is found when webhook has full number"""
 		from crm.integrations.api import get_contact
+
 		# Webhook sends: 5216691252213 (with country code and trunk)
 		# Contact stored: 6691252213 (without country code)
 		result = get_contact("5216691252213", "MX")

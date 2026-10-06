@@ -12,8 +12,8 @@ describe('shouldInterceptReversal', () => {
         'Perdido',
         'Negotiation',
         'Lost',
-        'Ongoing'
-      )
+        'Ongoing',
+      ),
     ).toBe(true)
   })
 
@@ -25,8 +25,8 @@ describe('shouldInterceptReversal', () => {
         'Delivery',
         'Validation',
         'Won',
-        'Ongoing'
-      )
+        'Ongoing',
+      ),
     ).toBe(true)
   })
 
@@ -40,8 +40,8 @@ describe('shouldInterceptReversal', () => {
         'Some Custom Won Name',
         'Validation',
         'Won',
-        'Ongoing'
-      )
+        'Ongoing',
+      ),
     ).toBe(true)
   })
 
@@ -53,8 +53,8 @@ describe('shouldInterceptReversal', () => {
         'Delivery',
         'Validation',
         'Ongoing',
-        'Ongoing'
-      )
+        'Ongoing',
+      ),
     ).toBe(false)
   })
 
@@ -68,8 +68,8 @@ describe('shouldInterceptReversal', () => {
         'Perdido',
         'Negotiation',
         'Lost',
-        'Ongoing'
-      )
+        'Ongoing',
+      ),
     ).toBe(false)
   })
 
@@ -83,8 +83,8 @@ describe('shouldInterceptReversal', () => {
         'Perdido',
         'Negotiation',
         'Lost',
-        'Ongoing'
-      )
+        'Ongoing',
+      ),
     ).toBe(false)
   })
 
@@ -98,8 +98,8 @@ describe('shouldInterceptReversal', () => {
         'Identification',
         'Validation',
         'Open',
-        'Ongoing'
-      )
+        'Ongoing',
+      ),
     ).toBe(false)
   })
 
@@ -113,8 +113,8 @@ describe('shouldInterceptReversal', () => {
         'Negotiation',
         'Perdido',
         'Ongoing',
-        'Lost'
-      )
+        'Lost',
+      ),
     ).toBe(false)
   })
 
@@ -128,8 +128,8 @@ describe('shouldInterceptReversal', () => {
         'Perdido',
         'Delivery',
         'Lost',
-        'Won'
-      )
+        'Won',
+      ),
     ).toBe(false)
   })
 
@@ -143,8 +143,8 @@ describe('shouldInterceptReversal', () => {
         'Perdido',
         'Perdido',
         'Lost',
-        'Lost'
-      )
+        'Lost',
+      ),
     ).toBe(false)
   })
 
@@ -152,13 +152,27 @@ describe('shouldInterceptReversal', () => {
 
   it('returns false when fromStatus is empty', () => {
     expect(
-      shouldInterceptReversal('CRM Deal', 'status', '', 'Negotiation', 'Lost', 'Ongoing')
+      shouldInterceptReversal(
+        'CRM Deal',
+        'status',
+        '',
+        'Negotiation',
+        'Lost',
+        'Ongoing',
+      ),
     ).toBe(false)
   })
 
   it('returns false when toStatus is empty', () => {
     expect(
-      shouldInterceptReversal('CRM Deal', 'status', 'Perdido', '', 'Lost', 'Ongoing')
+      shouldInterceptReversal(
+        'CRM Deal',
+        'status',
+        'Perdido',
+        '',
+        'Lost',
+        'Ongoing',
+      ),
     ).toBe(false)
   })
 
@@ -172,8 +186,8 @@ describe('shouldInterceptReversal', () => {
         'Perdido',
         'Negotiation',
         undefined,
-        'Ongoing'
-      )
+        'Ongoing',
+      ),
     ).toBe(false)
   })
 
@@ -186,8 +200,8 @@ describe('shouldInterceptReversal', () => {
         'Perdido',
         'Negotiation',
         'Lost',
-        undefined
-      )
+        undefined,
+      ),
     ).toBe(true)
   })
 })

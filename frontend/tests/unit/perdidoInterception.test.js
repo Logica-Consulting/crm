@@ -22,7 +22,7 @@ describe('shouldInterceptPerdido', () => {
 
   it('returns false when column_field is "comercial_pipeline_stage" (legacy)', () => {
     expect(
-      shouldInterceptPerdido('CRM Deal', 'comercial_pipeline_stage', 'Perdido')
+      shouldInterceptPerdido('CRM Deal', 'comercial_pipeline_stage', 'Perdido'),
     ).toBe(false)
   })
 
@@ -41,9 +41,9 @@ describe('shouldInterceptPerdido', () => {
   })
 
   it('returns false when target is a non-terminal stage (e.g. Identification)', () => {
-    expect(
-      shouldInterceptPerdido('CRM Deal', 'status', 'Identification')
-    ).toBe(false)
+    expect(shouldInterceptPerdido('CRM Deal', 'status', 'Identification')).toBe(
+      false,
+    )
   })
 
   it('returns false when target is empty', () => {
@@ -53,7 +53,9 @@ describe('shouldInterceptPerdido', () => {
   // -- Negative: all wrong --
 
   it('returns false when all three conditions are wrong', () => {
-    expect(shouldInterceptPerdido('CRM Lead', 'comercial_pipeline_stage', 'Open')).toBe(false)
+    expect(
+      shouldInterceptPerdido('CRM Lead', 'comercial_pipeline_stage', 'Open'),
+    ).toBe(false)
   })
 
   // -- Edge: case sensitivity --

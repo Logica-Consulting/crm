@@ -45,8 +45,8 @@
     >
       <template #tab-panel>
         <component
-          v-if="activeCustomTab"
           :is="activeCustomTab.render"
+          v-if="activeCustomTab"
           :dealId="dealId"
           :dealName="title"
           class="flex flex-1 overflow-hidden"

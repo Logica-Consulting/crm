@@ -140,9 +140,7 @@ def _get_whatsapp_reference_title(reference_doctype, reference_name):
 			return reference_name
 		return (
 			lead.get("lead_name")
-			or " ".join(
-				part for part in [lead.get("first_name"), lead.get("last_name")] if part
-			).strip()
+			or " ".join(part for part in [lead.get("first_name"), lead.get("last_name")] if part).strip()
 			or lead.get("organization")
 			or reference_name
 		)
@@ -466,7 +464,9 @@ def get_whatsapp_messages(reference_doctype: str, reference_name: str):
 
 
 @frappe.whitelist()
-def get_whatsapp_chats(search: str | None = None, order_by: str = "last_message_on desc", start=0, page_length=20):
+def get_whatsapp_chats(
+	search: str | None = None, order_by: str = "last_message_on desc", start: int = 0, page_length: int = 20
+):
 	validate_access()
 	if "twilio_integration" in frappe.get_installed_apps():
 		return {"data": [], "row_count": 0, "total_count": 0, "page_length_count": 0}
@@ -502,8 +502,8 @@ def get_whatsapp_chats(search: str | None = None, order_by: str = "last_message_
 	for reference in references:
 		latest_messages = frappe.get_all(
 			"WhatsApp Message",
-			filters=message_reference_filters
-			+ [
+			filters=[
+				*message_reference_filters,
 				["reference_doctype", "=", reference.get("reference_doctype")],
 				["reference_name", "=", reference.get("reference_name")],
 			],
@@ -616,13 +616,13 @@ def create_whatsapp_message(
 def get_template_variables(template: str) -> list[dict]:
 	"""
 	Extrae variables nombradas del body de una plantilla WhatsApp.
-	
+
 	Args:
 		template: Nombre del documento WhatsApp Templates
-		
+
 	Returns:
 		Lista de dicts con {name, placeholder} ordenados alfabéticamente
-		
+
 	Example:
 		get_template_variables("sipra_bienvenida_con_formulario_-es_MX")
 		→ [
@@ -632,23 +632,20 @@ def get_template_variables(template: str) -> list[dict]:
 		  ]
 	"""
 	import re
-	
+
 	template_doc = frappe.get_doc("WhatsApp Templates", template)
 	body = template_doc.template or ""
-	
+
 	# Regex para variables nombradas: solo minúsculas y guiones bajos
 	# Ej: {{nombre}}, {{lead_owner}}, {{custom_field}}
 	# NO match: {{Nombre}}, {{id123}}, {{teléfono}}
 	pattern = r"\{\{([a-z][a-z0-9_]*)\}\}"
 	matches = re.findall(pattern, body)
-	
+
 	# Eliminar duplicados y ordenar alfabéticamente
 	unique_vars = sorted(set(matches))
-	
-	return [
-		{"name": var, "placeholder": f"{{{{{var}}}}}"}
-		for var in unique_vars
-	]
+
+	return [{"name": var, "placeholder": f"{{{{{var}}}}}"} for var in unique_vars]
 
 
 def _deny_whatsapp_preview_access():
@@ -663,7 +660,7 @@ def _serialize_whatsapp_preview_value(value):
 		return value
 	if type(value) is float:
 		return value if math.isfinite(value) else _UNSERIALIZABLE_WHATSAPP_PREVIEW_VALUE
-	if isinstance(value, (datetime, date, time)):
+	if isinstance(value, datetime | date | time):
 		return value.isoformat()
 	if isinstance(value, Decimal):
 		return format(value, "f")
@@ -860,15 +857,11 @@ def get_whatsapp_preview_fields(reference_doctype: str, reference_name: str) -> 
 
 @frappe.whitelist()
 def send_whatsapp_template(
-	reference_doctype: str,
-	reference_name: str,
-	template: str,
-	to: str,
-	body_param: dict | None = None
+	reference_doctype: str, reference_name: str, template: str, to: str, body_param: dict | None = None
 ):
 	"""
 	Envía plantilla WhatsApp con variables nombradas.
-	
+
 	Args:
 		reference_doctype: DocType de referencia (ej: "CRM Lead")
 		reference_name: Nombre del documento (ej: "LEAD-001")
@@ -972,9 +965,9 @@ def add_roles():
 
 
 @frappe.whitelist()
-def get_whatsapp_template_fields(doctype: str, template_name: str = None) -> dict:
+def get_whatsapp_template_fields(doctype: str, template_name: str | None = None) -> dict:
 	"""Return fields for a doctype including custom fields, plus existing mapping if template provided.
-	
+
 	Used by the WhatsApp variable mapping UI to pre-populate field selections.
 	"""
 	if not any(role in ALLOWED_WHATSAPP_ROLES for role in frappe.get_roles()):
@@ -984,11 +977,11 @@ def get_whatsapp_template_fields(doctype: str, template_name: str = None) -> dic
 		frappe.throw(_("Invalid doctype."))
 
 	meta = frappe.get_meta(doctype)
-	
+
 	# Build field list including custom fields
 	fields = []
 	seen_fieldnames = set()
-	
+
 	for field in meta.fields:
 		fieldname = getattr(field, "fieldname", None)
 		if not fieldname or fieldname in seen_fieldnames:
@@ -997,14 +990,16 @@ def get_whatsapp_template_fields(doctype: str, template_name: str = None) -> dic
 			continue
 		if getattr(field, "hidden", 0):
 			continue
-		
+
 		seen_fieldnames.add(fieldname)
-		fields.append({
-			"fieldname": fieldname,
-			"label": getattr(field, "label", None) or fieldname,
-			"fieldtype": getattr(field, "fieldtype", None),
-		})
-	
+		fields.append(
+			{
+				"fieldname": fieldname,
+				"label": getattr(field, "label", None) or fieldname,
+				"fieldtype": getattr(field, "fieldtype", None),
+			}
+		)
+
 	# Also include custom fields from Custom Field doctype
 	custom_fields = frappe.get_all(
 		"Custom Field",
@@ -1015,22 +1010,26 @@ def get_whatsapp_template_fields(doctype: str, template_name: str = None) -> dic
 		fieldname = cf.get("fieldname")
 		if fieldname and fieldname not in seen_fieldnames:
 			seen_fieldnames.add(fieldname)
-			fields.append({
-				"fieldname": fieldname,
-				"label": cf.get("label") or fieldname,
-				"fieldtype": cf.get("fieldtype"),
-			})
+			fields.append(
+				{
+					"fieldname": fieldname,
+					"label": cf.get("label") or fieldname,
+					"fieldtype": cf.get("fieldtype"),
+				}
+			)
 
 	if doctype in WHATSAPP_ADVISOR_OWNER_FIELDS:
 		for fieldname, label in WHATSAPP_DERIVED_FIELDS.items():
 			if fieldname not in seen_fieldnames:
 				seen_fieldnames.add(fieldname)
-				fields.append({
-					"fieldname": fieldname,
-					"label": label,
-					"fieldtype": "Data",
-				})
-	
+				fields.append(
+					{
+						"fieldname": fieldname,
+						"label": label,
+						"fieldtype": "Data",
+					}
+				)
+
 	# Load existing mapping if template provided
 	existing_mapping = {}
 	if template_name:
@@ -1040,14 +1039,14 @@ def get_whatsapp_template_fields(doctype: str, template_name: str = None) -> dic
 				existing_mapping = json.loads(template.named_field_mapping)
 		except Exception:
 			pass
-	
+
 	return {"fields": fields, "existing_mapping": existing_mapping}
 
 
 @frappe.whitelist()
 def save_whatsapp_template_mapping(template_name: str, field_mapping: dict | str) -> dict:
 	"""Save the field mapping for a WhatsApp template.
-	
+
 	field_mapping: JSON object mapping variable names to fieldnames, e.g. {"nombre": "lead_name"}
 	"""
 	if not any(role in ALLOWED_WHATSAPP_ROLES for role in frappe.get_roles()):
@@ -1068,5 +1067,5 @@ def save_whatsapp_template_mapping(template_name: str, field_mapping: dict | str
 	template = frappe.get_doc("WhatsApp Templates", template_name)
 	template.named_field_mapping = json.dumps(field_mapping)
 	template.save(ignore_permissions=True)
-	
+
 	return {"success": True, "mapping": field_mapping}
