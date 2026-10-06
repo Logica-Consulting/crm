@@ -177,10 +177,7 @@ router.beforeEach(async (to, from, next) => {
   }
 
   // Clear deal context when leaving the workspace
-  if (
-    from.name === 'DealWorkspace' &&
-    to.name !== 'DealWorkspace'
-  ) {
+  if (from.name === 'DealWorkspace' && to.name !== 'DealWorkspace') {
     try {
       const dealCtx = useDealContextStore()
       dealCtx.clear()

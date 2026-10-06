@@ -1,7 +1,9 @@
 <template>
   <LayoutHeader>
     <template #left-header>
-      <div class="flex items-center gap-2 text-lg font-semibold text-ink-gray-9">
+      <div
+        class="flex items-center gap-2 text-lg font-semibold text-ink-gray-9"
+      >
         <WhatsAppIcon class="size-5" />
         <span>{{ __('Whatsapp') }}</span>
       </div>
@@ -51,8 +53,13 @@
       <ListRows v-slot="{ column, item }" :rows="rows" doctype="WhatsApp Chat">
         <ListRowItem :item="item" :align="column.align" class="overflow-hidden">
           <template #default>
-            <Tooltip v-if="column.key === 'last_message_on'" :text="formatExactDate(item)">
-              <div class="truncate text-base">{{ formatLastMessageTime(item) }}</div>
+            <Tooltip
+              v-if="column.key === 'last_message_on'"
+              :text="formatExactDate(item)"
+            >
+              <div class="truncate text-base">
+                {{ formatLastMessageTime(item) }}
+              </div>
             </Tooltip>
             <div v-else class="truncate text-base">
               {{ item }}
@@ -75,7 +82,9 @@
     </div>
 
     <div
-      v-if="chats.page_length_count && chats.page_length_count < chats.total_count"
+      v-if="
+        chats.page_length_count && chats.page_length_count < chats.total_count
+      "
       class="border-t px-3 py-2 sm:px-5"
     >
       <Button :loading="loading" :label="__('Load more')" @click="loadMore" />
